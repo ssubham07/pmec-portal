@@ -18,16 +18,6 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [loadingCaptcha, setLoadingCaptcha] = useState(false);
 
-  // Student 2-step OTP verification state
-  const [otpStep, setOtpStep] = useState(false);
-  const [userId, setUserId] = useState('');
-  const [otp, setOtp] = useState('');
-  const [otpMessage, setOtpMessage] = useState('');
-  const [otpError, setOtpError] = useState('');
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [resending, setResending] = useState(false);
-  const [resendNotice, setResendNotice] = useState('');
-
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const r = params.get('role');
@@ -72,14 +62,6 @@ export default function Login() {
         captchaId,
       });
 
-      // OTP is required for Student Login
-      if (role === 'student' && data.otpRequired) {
-        setOtpStep(true);
-        setUserId(data.studentId);
-        setOtpMessage(data.message || 'A 6-digit verification code has been emailed to your registered student address.');
-        return;
-      }
-
       login(data.token, data.user);
       navigate(role === 'student' ? '/dashboard' : '/admin');
     } catch (err) {
@@ -91,48 +73,11 @@ export default function Login() {
     }
   }
 
-  async function handleVerifyOtp(e) {
-    e.preventDefault();
-    setOtpError('');
-    if (!otp.trim() || otp.trim().length !== 6) {
-      setOtpError('Please enter the 6-digit OTP code.');
-      return;
-    }
-    setOtpLoading(true);
-    try {
-      const endpoint = role === 'student' ? '/auth/student/verify-otp' : '/auth/admin/verify-otp';
-      const payload = role === 'student' ? { studentId: userId, otp: otp.trim() } : { adminId: userId, otp: otp.trim() };
-      const { data } = await api.post(endpoint, payload);
-      login(data.token, data.user);
-      navigate(role === 'student' ? '/dashboard' : '/admin');
-    } catch (err) {
-      setOtpError(err.response?.data?.error || 'Invalid or expired OTP code. Please try again.');
-    } finally {
-      setOtpLoading(false);
-    }
-  }
-
-  async function handleResendOtp() {
-    setOtpError('');
-    setResendNotice('');
-    setResending(true);
-    try {
-      const endpoint = role === 'student' ? '/auth/student/resend-otp' : '/auth/admin/resend-otp';
-      const payload = role === 'student' ? { studentId: userId } : { adminId: userId };
-      const { data } = await api.post(endpoint, payload);
-      setResendNotice(data.message || 'A new 6-digit verification code has been dispatched.');
-    } catch (err) {
-      setOtpError(err.response?.data?.error || 'Failed to resend OTP. Please wait before trying again.');
-    } finally {
-      setResending(false);
-    }
-  }
-
   function fillDemo(type) {
     setError('');
     if (type === 'student') {
       setRole('student');
-      setEmail('ravi.sahoo@student.pmec.edu');
+      setEmail('2301109307_cse@pmec.ac.in');
       setPassword('Password@123');
     } else if (type === 'dsw') {
       setRole('admin');
@@ -157,128 +102,53 @@ export default function Login() {
             </div>
           </Link>
           <h1 className="text-xl font-extrabold text-[#0f2a52]">
-            {otpStep ? 'Two-Step Verification' : role === 'student' ? 'Student Portal' : 'Institute Portal'}
+            {role === 'student' ? 'Student Portal Login' : 'Institute Officer Login'}
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">Parala Maharaja Engineering College</p>
         </div>
 
-        {otpStep ? (
-          <div>
-            <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-4 mb-5 text-xs">
-              <div className="font-bold mb-1 flex items-center gap-1.5 text-blue-950">
-                <span>🔐</span> Two-Step Student Verification
-              </div>
-              <p>{otpMessage}</p>
-              <p className="mt-1.5 text-slate-600 font-mono font-semibold">Account: {email}</p>
-            </div>
+        {/* Role Switcher */}
+        <div className="flex mb-5 bg-slate-100 rounded-xl p-1 text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => {
+              setRole('student');
+              setError('');
+            }}
+            className={`flex-1 py-2 rounded-lg transition ${
+              role === 'student' ? 'bg-[#0f2a52] text-white shadow' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            🎓 Student Login
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setRole('admin');
+              setError('');
+            }}
+            className={`flex-1 py-2 rounded-lg transition ${
+              role === 'admin' ? 'bg-[#0f2a52] text-white shadow' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            🏛️ Institute Login
+          </button>
+        </div>
 
-            {otpError && (
-              <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-3 mb-4 leading-relaxed">
-                {otpError}
-              </div>
-            )}
-
-            {resendNotice && (
-              <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-4 leading-relaxed">
-                {resendNotice}
-              </div>
-            )}
-
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Enter 6-Digit Verification Code *
-                </label>
-                <input
-                  type="text"
-                  maxLength={6}
-                  autoFocus
-                  placeholder="------"
-                  required
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                  className="w-full text-center text-2xl font-mono tracking-[0.4em] border border-slate-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#0f2a52]"
-                />
-                <p className="text-[11px] text-slate-400 text-center mt-1">Code expires in 5 minutes (5 wrong attempts limit)</p>
-              </div>
-
-              <button
-                type="submit"
-                disabled={otpLoading || otp.length !== 6}
-                className="w-full bg-[#0f2a52] hover:bg-[#1a3a69] text-white rounded-lg py-2.5 text-sm font-bold shadow transition disabled:opacity-50"
-              >
-                {otpLoading ? 'Verifying OTP...' : 'Verify OTP & Complete Sign In'}
-              </button>
-            </form>
-
-            <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-100 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setOtpStep(false);
-                  setOtp('');
-                  setOtpError('');
-                  setResendNotice('');
-                  fetchCaptcha();
-                }}
-                className="text-slate-500 hover:text-slate-800"
-              >
-                ← Back to Login
-              </button>
-              <button
-                type="button"
-                onClick={handleResendOtp}
-                disabled={resending}
-                className="text-[#0f2a52] font-semibold hover:underline disabled:opacity-50"
-              >
-                {resending ? 'Sending...' : 'Resend Code'}
-              </button>
-            </div>
+        {error && (
+          <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-3 mb-4 leading-relaxed">
+            {error}
           </div>
-        ) : (
-          <>
-            {/* Role Switcher */}
-            <div className="flex mb-5 bg-slate-100 rounded-xl p-1 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => {
-                  setRole('student');
-                  setError('');
-                }}
-                className={`flex-1 py-2 rounded-lg transition ${
-                  role === 'student' ? 'bg-[#0f2a52] text-white shadow' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                🎓 Student Login
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setRole('admin');
-                  setError('');
-                }}
-                className={`flex-1 py-2 rounded-lg transition ${
-                  role === 'admin' ? 'bg-[#0f2a52] text-white shadow' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                🏛️ Institute Login
-              </button>
-            </div>
-
-            {error && (
-              <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-3 mb-4 leading-relaxed">
-                {error}
-              </div>
-            )}
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              {role === 'student' ? 'Student Email' : 'Officer Email'}
+              {role === 'student' ? 'College Email Address' : 'Officer Email'}
             </label>
             <input
               type="email"
-              placeholder={role === 'student' ? 'e.g. roll@student.pmec.edu' : 'e.g. officer@pmec.edu'}
+              placeholder={role === 'student' ? 'e.g. 2301109307_cse@pmec.ac.in' : 'e.g. dsw@pmec.ac.in'}
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -374,7 +244,7 @@ export default function Login() {
           <p className="text-xs text-center text-slate-500 mt-4">
             New student?{' '}
             <Link to="/register" className="text-[#0f2a52] font-semibold hover:underline">
-              Register here
+              Create Account
             </Link>
           </p>
         )}
@@ -384,8 +254,6 @@ export default function Login() {
             ← Back to Public Portal
           </Link>
         </div>
-        </>
-        )}
       </div>
     </div>
   );

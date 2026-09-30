@@ -63,12 +63,26 @@ export default function AdminRequestDetail() {
 
         <div className="grid sm:grid-cols-2 gap-3 text-sm mb-5 bg-slate-50 border border-slate-200 rounded-lg p-4">
           <div><p className="text-slate-400 text-xs uppercase">Student</p><p>{request.student_name}</p></div>
-          <div><p className="text-slate-400 text-xs uppercase">Roll No.</p><p>{request.roll_no}</p></div>
+          <div><p className="text-slate-400 text-xs uppercase">College Reg No.</p><p className="font-mono">{request.roll_no}</p></div>
           <div><p className="text-slate-400 text-xs uppercase">Department</p><p>{request.student_department}</p></div>
           <div><p className="text-slate-400 text-xs uppercase">Semester</p><p>{request.student_semester}</p></div>
           <div><p className="text-slate-400 text-xs uppercase">Email</p><p>{request.student_email}</p></div>
           <div><p className="text-slate-400 text-xs uppercase">Phone</p><p>{request.student_phone || '—'}</p></div>
         </div>
+
+        {request.details?.challan_ref_no && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-900 mb-4 flex items-center justify-between">
+            <div>
+              <span className="font-bold">🏦 Bank Challan / Fee Reference No:</span>
+              <span className="ml-2 font-mono font-bold text-emerald-800 text-sm">{request.details.challan_ref_no}</span>
+            </div>
+            {request.details?.fee_amount && (
+              <span className="bg-white px-2 py-1 rounded border border-emerald-200 font-semibold">
+                Fee: INR {request.details.fee_amount}
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="grid sm:grid-cols-2 gap-3 text-sm mb-5">
           {Object.entries(request.details || {}).map(([k, v]) => (

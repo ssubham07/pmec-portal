@@ -30,26 +30,15 @@ async function registerStudent(req, res) {
   try {
     const { roll_no, name, department, semester, email, phone, password } = req.body;
     if (!roll_no || !name || !department || !semester || !email || !password) {
-      return res.status(400).json({ error: 'roll_no, name, department, semester, email and password are required.' });
+      return res.status(400).json({ error: 'College Registration Number, name, department, semester, email and password are required.' });
     }
 
-    // Feature 1: ID Card Upload Requirement
-    if (!req.file) {
-      return res.status(400).json({ error: 'College ID Card is required for registration.' });
-    }
-
-    const existing = await Student.findByEmail(email);
-    if (existing) return res.status(409).json({ error: 'An account with this email already exists.' });
-
-    // Official email domain verification gate
-    const officialDomain = process.env.STUDENT_EMAIL_DOMAIN || '@pmec.ac.in';
-    const isOfficial = email.toLowerCase().endsWith(officialDomain.toLowerCase()) || email.toLowerCase().endsWith('@pmec.edu');
-    const status = isOfficial ? 'active' : 'pending_verification';
-
-    const id_card_url = `/uploads/id_cards/${req.file.filename}`;
-    const id_card_uploaded_at = new Date();
+    const existingEmail = await Student.findByEmail(email);
+    if (existingEmail) return res.status(409).json({ error: 'An account with this email already exists.' });
 
     const password_hash = await bcrypt.hash(password, 10);
+    const status = 'pending_otp';
+
     const student = await Student.create({
       roll_no,
       name,
@@ -59,22 +48,36 @@ async function registerStudent(req, res) {
       phone,
       password_hash,
       status,
-      id_card_url,
-      id_card_uploaded_at,
+      id_card_url: null,
+      id_card_uploaded_at: null,
     });
 
-    if (status === 'pending_verification') {
-      return res.status(201).json({
-        message: 'Registration submitted. Because you registered with a personal email, your account is pending verification by the Institute before you can log in.',
-        pendingVerification: true,
-        user: { ...student, role: 'student' },
-      });
-    }
+    // Generate 6-digit random numeric OTP for Student Registration
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpHash = await bcrypt.hash(otp, 10);
 
-    const token = signToken({ id: student.id, role: 'student', email: student.email, name: student.name });
-    res.status(201).json({ token, user: { ...student, role: 'student' } });
+    const expiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES, 10) || 5;
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
+
+    await Student.setOtp(student.id, otpHash, expiresAt);
+
+    // Send OTP via email and log for development/testing
+    const textMsg = `Welcome to PMEC Student Portal!\n\nYour registration verification code is: ${otp}. It will expire in ${expiryMinutes} minutes.\n\nPlease enter this code to activate your account.`;
+    console.log(`[AUTH] Student Registration OTP generated for ${student.email}: ${otp}`);
+    sendMail({
+      to: student.email,
+      subject: 'PMEC Portal - Student Registration Verification Code',
+      text: textMsg,
+    });
+
+    res.status(201).json({
+      otpRequired: true,
+      studentId: student.id,
+      email: student.email,
+      message: `A 6-digit verification code has been sent to ${student.email}.`,
+    });
   } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'Roll number or email already registered.' });
+    if (err.code === '23505') return res.status(409).json({ error: 'College Registration Number or email already registered.' });
     console.error(err);
     res.status(500).json({ error: 'Registration failed.' });
   }
@@ -95,36 +98,32 @@ async function loginStudent(req, res) {
     const match = await bcrypt.compare(password, student.password_hash);
     if (!match) return res.status(401).json({ error: 'Invalid email or password.' });
 
-    // Gate: Block unverified students
+    // Gate: Check unverified / pending status
+    if (student.status === 'pending_otp') {
+      return res.status(403).json({
+        error: 'Registration verification incomplete. Please enter the OTP code sent to your email to activate your account.',
+        pendingOtp: true,
+        studentId: student.id,
+        email: student.email,
+      });
+    }
+
     if (student.status === 'pending_verification') {
       return res.status(403).json({
         error: 'Your account is pending verification by the Institute. Please wait for an administrator to verify your credentials.',
       });
     }
 
-    // Generate 6-digit random numeric OTP for Student
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
-    const otpHash = await bcrypt.hash(otp, 10);
+    if (student.status === 'rejected') {
+      return res.status(403).json({
+        error: 'Your account registration was rejected by the Institute.',
+      });
+    }
 
-    const expiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES, 10) || 5;
-    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
-
-    await Student.setOtp(student.id, otpHash, expiresAt);
-
-    // Send OTP via email and log for development/testing
-    const textMsg = `Your PMEC Student Portal login verification code is: ${otp}. It will expire in ${expiryMinutes} minutes.`;
-    console.log(`[AUTH] Student OTP generated for ${student.email}: ${otp}`);
-    sendMail({
-      to: student.email,
-      subject: 'PMEC Portal - Student Login Verification Code',
-      text: textMsg,
-    });
-
-    res.json({
-      otpRequired: true,
-      studentId: student.id,
-      message: `A 6-digit verification code has been sent to ${student.email}.`,
-    });
+    // Direct 1-Step Login without OTP
+    const token = signToken({ id: student.id, role: 'student', email: student.email, name: student.name });
+    const { password_hash, otp_code_hash, otp_expires_at, otp_attempts, ...safe } = student;
+    res.json({ token, user: { ...safe, role: 'student' } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Login failed.' });
@@ -160,11 +159,24 @@ async function verifyStudentOtp(req, res) {
       return res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
     }
 
-    // Clear OTP fields on successful login
-    await Student.clearOtp(student.id);
+    // Official email domain verification gate
+    const officialDomain = process.env.STUDENT_EMAIL_DOMAIN || '@pmec.ac.in';
+    const isOfficial = student.email.toLowerCase().endsWith(officialDomain.toLowerCase()) || student.email.toLowerCase().endsWith('@pmec.edu');
+    const finalStatus = isOfficial ? 'active' : 'pending_verification';
 
-    const token = signToken({ id: student.id, role: 'student', email: student.email, name: student.name });
-    const { password_hash, otp_code_hash, otp_expires_at, otp_attempts, ...safe } = student;
+    const updated = await Student.activateAfterOtp(student.id, finalStatus);
+
+    if (finalStatus === 'pending_verification') {
+      return res.json({
+        pendingVerification: true,
+        message: 'Email verified successfully! Because you registered with a personal email, your account is pending verification by the Institute before you can log in.',
+        user: { ...updated, role: 'student' },
+      });
+    }
+
+    // Active instant JWT login
+    const token = signToken({ id: updated.id, role: 'student', email: updated.email, name: updated.name });
+    const { password_hash, otp_code_hash, otp_expires_at, otp_attempts, ...safe } = updated;
     res.json({ token, user: { ...safe, role: 'student' } });
   } catch (err) {
     console.error(err);
@@ -187,11 +199,11 @@ async function resendStudentOtp(req, res) {
 
     await Student.setOtp(student.id, otpHash, expiresAt);
 
-    console.log(`[AUTH] Resent Student OTP for ${student.email}: ${otp}`);
+    console.log(`[AUTH] Resent Student Registration OTP for ${student.email}: ${otp}`);
     sendMail({
       to: student.email,
-      subject: 'PMEC Portal - Resent Student Login Verification Code',
-      text: `Your new PMEC Student Portal login verification code is: ${otp}. It will expire in ${expiryMinutes} minutes.`,
+      subject: 'PMEC Portal - Resent Registration Verification Code',
+      text: `Your new PMEC Student Portal registration verification code is: ${otp}. It will expire in ${expiryMinutes} minutes.`,
     });
 
     res.json({ message: 'A fresh verification code has been sent to your email.' });

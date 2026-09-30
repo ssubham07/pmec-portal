@@ -85,6 +85,8 @@ async function generateCertificatePdf({
     title = 'BONAFIDE CERTIFICATE';
   } else if (request.type === 'scholarship_verification') {
     title = 'SCHOLARSHIP VERIFICATION CERTIFICATE';
+  } else if (request.type === 'back_paper') {
+    title = 'BACK PAPER REGISTRATION & CHALLAN CLEARANCE';
   }
   drawLetterhead(doc, title);
 
@@ -101,7 +103,7 @@ async function generateCertificatePdf({
     const payDate = request.details?.payment_date || new Date().toLocaleDateString('en-IN');
 
     doc.text(
-      `This is to certify that ${request.student_name} (Roll No: ${request.roll_no}), ` +
+      `This is to certify that ${request.student_name} (College Reg No: ${request.roll_no}), ` +
         `a regular student of the ${request.student_department} department, has successfully completed ` +
         `the institutional semester registration process for Semester ${sem} at Parala Maharaja Engineering College.`,
       { align: 'justify', lineGap: 4 }
@@ -120,10 +122,40 @@ async function generateCertificatePdf({
       `This electronic certificate serves as official verification of semester registration and fee clearance for all academic and administrative purposes.`,
       { align: 'justify', lineGap: 4 }
     );
+  } else if (request.type === 'back_paper') {
+    const subjCode = request.details?.subject_code || 'N/A';
+    const subjName = request.details?.subject_name ? ` (${request.details.subject_name})` : '';
+    const sem = request.details?.semester || request.student_semester;
+    const challanNo = request.details?.challan_ref_no || request.details?.bank_challan_no || 'Verified';
+    const feeAmount = request.details?.fee_amount ? `INR ${request.details.fee_amount}` : 'Verified';
+    const payDate = request.details?.payment_date || new Date().toLocaleDateString('en-IN');
+
+    doc.text(
+      `This is to certify that ${request.student_name} (College Reg No: ${request.roll_no}), ` +
+        `a regular student of the ${request.student_department} department, has completed back paper ` +
+        `registration for Semester ${sem} examination in Subject ${subjCode}${subjName} at Parala Maharaja Engineering College.`,
+      { align: 'justify', lineGap: 4 }
+    );
+    doc.moveDown(0.8);
+    doc.fontSize(10).fillColor('#1e293b').text(
+      `Bank Challan & Fee Clearance Audit:\n` +
+        `• Bank Challan / Reference No: ${challanNo}\n` +
+        `• Subject Code & Name: ${subjCode}${subjName}\n` +
+        `• Semester: ${sem}\n` +
+        `• Challan Amount Paid: ${feeAmount}\n` +
+        `• Payment / Challan Date: ${payDate}\n` +
+        `• Examination Office Audit: COMPLETED & VERIFIED`,
+      { align: 'justify', lineGap: 3 }
+    );
+    doc.moveDown(0.8);
+    doc.fontSize(11).fillColor('#111827').text(
+      `This certificate confirms fee receipt clearance and admission endorsement for the back paper examination.`,
+      { align: 'justify', lineGap: 4 }
+    );
   } else if (request.type === 'bonafide_certificate') {
     const bonafideRef = request.details?.bonafide_ref_no || certificateNo;
     doc.text(
-      `This is to certify that ${request.student_name} (Roll No: ${request.roll_no}), ` +
+      `This is to certify that ${request.student_name} (College Reg No: ${request.roll_no}), ` +
         `a bonafide student of the ${request.student_department} department, currently studying in ` +
         `Semester ${request.student_semester} of Parala Maharaja Engineering College, is a regular ` +
         `student of this institution during the academic session ${new Date().getFullYear()}.`,
@@ -148,7 +180,7 @@ async function generateCertificatePdf({
     const acadYear = request.details?.academic_year || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
 
     doc.text(
-      `This is to certify that ${request.student_name} (Roll No: ${request.roll_no}), a bonafide student ` +
+      `This is to certify that ${request.student_name} (College Reg No: ${request.roll_no}), a bonafide student ` +
         `of the ${request.student_department} department, Semester ${request.student_semester}, has been ` +
         `verified as eligible for the scholarship scheme "${scheme}" as per institutional records.`,
       { align: 'justify', lineGap: 4 }
@@ -205,7 +237,7 @@ async function generateApprovalMemoPdf({ request, admin, comment, signatureAbsPa
   doc.fontSize(11).fillColor('#111827');
   doc.text(`Request Type: ${TYPE_LABELS[request.type] || request.type}`);
   doc.text(`Request ID: #${request.id}`);
-  doc.text(`Student: ${request.student_name} (${request.roll_no})`);
+  doc.text(`Student: ${request.student_name} (Reg No: ${request.roll_no})`);
   doc.text(`Department / Semester: ${request.student_department} / Sem ${request.student_semester}`);
   doc.moveDown(0.5);
   doc.text('Status: APPROVED', { continued: false });

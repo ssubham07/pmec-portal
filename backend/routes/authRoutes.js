@@ -12,10 +12,9 @@ const {
   getCaptcha,
 } = require('../controllers/authController');
 const { authenticate } = require('../middleware/auth');
-const { uploadIdCard } = require('../middleware/upload');
 
 router.get('/captcha', getCaptcha);
-router.post('/student/register', uploadIdCard.single('id_card'), registerStudent);
+router.post('/student/register', registerStudent);
 router.post('/student/login', loginStudent);
 router.post('/student/verify-otp', verifyStudentOtp);
 router.post('/student/resend-otp', resendStudentOtp);

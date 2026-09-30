@@ -25,16 +25,23 @@ async function seed() {
   }
 
   const students = [
-    { roll_no: '2021CSE001', name: 'Ravi Kumar Sahoo', department: 'CSE', semester: 6, email: 'ravi.sahoo@student.pmec.edu', phone: '9800000001' },
-    { roll_no: '2021ECE014', name: 'Priya Patnaik', department: 'ECE', semester: 6, email: 'priya.patnaik@student.pmec.edu', phone: '9800000002' },
-    { roll_no: '2022ME021', name: 'Suman Behera', department: 'Mechanical', semester: 4, email: 'suman.behera@student.pmec.edu', phone: '9800000003' },
+    { roll_no: '2301109307', name: 'Subham Pradhan', department: 'CSE', semester: 6, email: '2301109307_cse@pmec.ac.in', phone: '9800000005' },
+    { roll_no: '2301109308', name: 'Ravi Kumar Sahoo', department: 'CSE', semester: 6, email: '2301109308_cse@pmec.ac.in', phone: '9800000001' },
+    { roll_no: '2301109309', name: 'Priya Patnaik', department: 'ECE', semester: 6, email: '2301109309_ece@pmec.ac.in', phone: '9800000002' },
   ];
 
   for (const s of students) {
     await pool.query(
-      `INSERT INTO students (roll_no, name, department, semester, email, phone, password_hash)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (email) DO NOTHING`,
+      `INSERT INTO students (roll_no, name, department, semester, email, phone, password_hash, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
+       ON CONFLICT (roll_no) DO UPDATE
+       SET email = EXCLUDED.email,
+           name = EXCLUDED.name,
+           department = EXCLUDED.department,
+           semester = EXCLUDED.semester,
+           phone = EXCLUDED.phone,
+           password_hash = EXCLUDED.password_hash,
+           status = 'active'`,
       [s.roll_no, s.name, s.department, s.semester, s.email, s.phone, passwordHash]
     );
   }

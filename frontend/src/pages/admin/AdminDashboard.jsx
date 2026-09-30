@@ -231,7 +231,7 @@ export default function AdminDashboard() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
                   <tr>
-                    <th className="p-3">Roll No.</th>
+                    <th className="p-3">College Reg No.</th>
                     <th className="p-3">Student Name</th>
                     <th className="p-3">Department</th>
                     <th className="p-3">Semester</th>

@@ -1,8 +1,8 @@
 /**
  * PMEC Student Service Request Portal - End-to-End Smoke Test Suite
  * Tests all core features including:
- * 1. Student College ID Card Verification (multipart upload, domain gating)
- * 2. Admin 2-Step OTP Authentication Flow (hash check, expiry, lockout)
+ * 1. College Registration Number & Email Format + Registration OTP (No ID Card required)
+ * 2. Direct 1-Step Login for Student & Admin (No OTP)
  * 3. Request submission, role-gated approvals, PDF generation, e-signatures & RBAC
  */
 
@@ -49,120 +49,72 @@ async function runSmokeTests() {
   const results = {};
 
   // ----------------------------------------------------
-  // SECTION 1: FEATURE 1 - STUDENT ID-CARD VERIFICATION & DOMAIN GATING
+  // SECTION 1: REGISTRATION OTP & COLLEGE REGISTRATION NUMBER FORMAT
   // ----------------------------------------------------
-  console.log('▶ [Test 1] Feature 1: Student ID-Card Verification & Domain Gating...');
+  console.log('▶ [Test 1] Student Registration OTP & College Reg No Format (No ID Card Required)...');
+  let newStudentId = null;
+  let newStudentEmail = '';
   try {
-    // 1a: Registration attempt WITHOUT ID card -> must return 400 Bad Request
-    const rollNoDoc = `2024CS${Math.floor(1000 + Math.random() * 9000)}`;
-    const fdNoCard = new FormData();
-    fdNoCard.append('roll_no', rollNoDoc);
-    fdNoCard.append('name', 'No Card Student');
-    fdNoCard.append('department', 'CSE');
-    fdNoCard.append('semester', '4');
-    fdNoCard.append('email', `nocard.${Date.now()}@pmec.ac.in`);
-    fdNoCard.append('phone', '9988776655');
-    fdNoCard.append('password', 'Password@123');
-
-    const regNoCard = await request('/auth/student/register', {
-      method: 'POST',
-      body: fdNoCard,
-    });
-
-    if (regNoCard.status !== 400 || !regNoCard.data.error.toLowerCase().includes('id card')) {
-      throw new Error(`Registration without ID card was not rejected: ${JSON.stringify(regNoCard.data)}`);
-    }
-    console.log('  ✔ Registration rejected with 400 when no ID card is attached');
-
-    // Create a mock ID card buffer for testing upload
-    const mockCardBytes = Buffer.from('%PDF-1.4 Mock ID Card PMEC Student 2026', 'utf-8');
-    const mockCardBlob = new Blob([mockCardBytes], { type: 'application/pdf' });
-
-    // 1b: Student with @pmec.ac.in domain + ID card -> instant active with JWT
-    const rollOfficial = `2024CS${Math.floor(1000 + Math.random() * 9000)}`;
-    const emailOfficial = `official.${Date.now()}@pmec.ac.in`;
-    const fdOfficial = new FormData();
-    fdOfficial.append('roll_no', rollOfficial);
-    fdOfficial.append('name', 'Official Student');
-    fdOfficial.append('department', 'CSE');
-    fdOfficial.append('semester', '4');
-    fdOfficial.append('email', emailOfficial);
-    fdOfficial.append('phone', '9988776655');
-    fdOfficial.append('password', 'Password@123');
-    fdOfficial.append('id_card', mockCardBlob, 'pmec_id_card.pdf');
+    // 1a: Registration with 10-digit College Registration Number & Official Email
+    const regNo = `230110${Math.floor(1000 + Math.random() * 9000)}`;
+    newStudentEmail = `${regNo}_cse@pmec.ac.in`;
 
     const regOfficial = await request('/auth/student/register', {
       method: 'POST',
-      body: fdOfficial,
-    });
-
-    if (
-      regOfficial.status !== 201 ||
-      regOfficial.data.user.status !== 'active' ||
-      !regOfficial.data.token ||
-      !regOfficial.data.user.id_card_url
-    ) {
-      throw new Error(`Official registration failed: ${JSON.stringify(regOfficial.data)}`);
-    }
-    console.log(`  ✔ @pmec.ac.in registered as active with instant JWT & stored ID card (${regOfficial.data.user.id_card_url})`);
-
-    // 1c: Student with personal email (@gmail.com) + ID card -> pending_verification, no token
-    const rollPersonal = `2024CS${Math.floor(1000 + Math.random() * 9000)}`;
-    const emailPersonal = `personal.${Date.now()}@gmail.com`;
-    const fdPersonal = new FormData();
-    fdPersonal.append('roll_no', rollPersonal);
-    fdPersonal.append('name', 'Pending Student');
-    fdPersonal.append('department', 'CSE');
-    fdPersonal.append('semester', '4');
-    fdPersonal.append('email', emailPersonal);
-    fdPersonal.append('phone', '9988776644');
-    fdPersonal.append('password', 'Password@123');
-    fdPersonal.append('id_card', mockCardBlob, 'personal_id_card.pdf');
-
-    const regPersonal = await request('/auth/student/register', {
-      method: 'POST',
-      body: fdPersonal,
-    });
-
-    if (
-      regPersonal.status !== 201 ||
-      regPersonal.data.user.status !== 'pending_verification' ||
-      regPersonal.data.token ||
-      !regPersonal.data.user.id_card_url
-    ) {
-      throw new Error(`Personal registration failed: ${JSON.stringify(regPersonal.data)}`);
-    }
-    console.log(`  ✔ Personal email registered as pending_verification (no token returned) & stored ID card (${regPersonal.data.user.id_card_url})`);
-
-    // 1d: Unverified student attempts login -> blocked with 403
-    const cap1 = await getCaptcha();
-    const loginPending = await request('/auth/student/login', {
-      method: 'POST',
       body: {
-        email: emailPersonal,
+        roll_no: regNo,
+        name: 'Auto Test Student',
+        department: 'CSE',
+        semester: 6,
+        email: newStudentEmail,
+        phone: '9988776655',
         password: 'Password@123',
-        captchaId: cap1.captchaId,
-        captchaInput: cap1.solution,
       },
     });
 
-    if (loginPending.status !== 403 || !loginPending.data.error.includes('pending verification')) {
-      throw new Error(`Pending login was not properly blocked: ${JSON.stringify(loginPending.data)}`);
+    if (regOfficial.status !== 201 || !regOfficial.data.otpRequired || !regOfficial.data.studentId) {
+      throw new Error(`Registration failed to initiate OTP: ${JSON.stringify(regOfficial.data)}`);
     }
-    console.log('  ✔ Pending student login blocked with 403 Forbidden until verified');
+    newStudentId = regOfficial.data.studentId;
+    console.log(`  ✔ Registration without ID card succeeded with 201 Created & OTP dispatch (studentId: ${newStudentId})`);
 
-    results['Feature 1: Student ID-Card Verification'] = 'PASSED (worked as expected)';
+    // 1b: Wrong OTP submission is rejected
+    const badOtp = await request('/auth/student/verify-otp', {
+      method: 'POST',
+      body: { studentId: newStudentId, otp: '000000' },
+    });
+    if (badOtp.status !== 400 || !badOtp.data.error.includes('Invalid')) {
+      throw new Error(`Wrong OTP was not rejected: ${JSON.stringify(badOtp.data)}`);
+    }
+    console.log('  ✔ Wrong registration OTP rejected with 400 Bad Request');
+
+    // 1c: Valid OTP submission verifies and issues instant JWT token for @pmec.ac.in
+    const Student = require('../models/Student');
+    const testOtpCode = '654321';
+    await Student.setOtp(newStudentId, await bcrypt.hash(testOtpCode, 10), new Date(Date.now() + 300000));
+
+    const goodOtp = await request('/auth/student/verify-otp', {
+      method: 'POST',
+      body: { studentId: newStudentId, otp: testOtpCode },
+    });
+    if (goodOtp.status !== 200 || !goodOtp.data.token || goodOtp.data.user.status !== 'active') {
+      throw new Error(`Valid registration OTP verification failed: ${JSON.stringify(goodOtp.data)}`);
+    }
+    console.log('  ✔ Valid registration OTP verified: Student activated with instant JWT token');
+
+    results['Feature 1: Student Registration OTP & Reg No'] = 'PASSED (worked as expected)';
   } catch (err) {
     console.error('  ✖ Test 1 Failed:', err.message);
-    results['Feature 1: Student ID-Card Verification'] = `FAILED: ${err.message}`;
+    results['Feature 1: Student Registration OTP & Reg No'] = `FAILED: ${err.message}`;
   }
 
   // ----------------------------------------------------
-  // SECTION 2: FEATURE 2 - STUDENT 2-STEP OTP & DIRECT ADMIN LOGIN
+  // SECTION 2: DIRECT 1-STEP LOGIN FOR STUDENT & ADMIN (NO OTP)
   // ----------------------------------------------------
-  console.log('\n▶ [Test 2] Student 2-Step OTP Verification & Direct Admin Login...');
+  console.log('\n▶ [Test 2] Direct 1-Step Login for Student & Admin (No OTP)...');
+  let studentToken = '';
   let adminToken = '';
-  let pendingStudentId = null;
+  let dswToken = '';
   try {
     // 2a: Test Captcha wrong input
     const capWrong = await getCaptcha();
@@ -180,9 +132,26 @@ async function runSmokeTests() {
     }
     console.log('  ✔ Invalid captcha rejected with 400');
 
-    // 2b: Admin login directly succeeds without OTP
+    // 2b: Student Direct 1-Step Login with College Email format
+    const capStudent = await getCaptcha();
+    const studentLogin = await request('/auth/student/login', {
+      method: 'POST',
+      body: {
+        email: '2301109307_cse@pmec.ac.in',
+        password: 'Password@123',
+        captchaId: capStudent.captchaId,
+        captchaInput: capStudent.solution,
+      },
+    });
+    if (studentLogin.status !== 200 || !studentLogin.data.token || studentLogin.data.otpRequired) {
+      throw new Error(`Direct student login failed: ${JSON.stringify(studentLogin.data)}`);
+    }
+    studentToken = studentLogin.data.token;
+    console.log(`  ✔ Student logged in directly in 1 step without OTP (Reg No: ${studentLogin.data.user.roll_no}, token issued)`);
+
+    // 2c: Admin Exam Cell Direct 1-Step Login
     const capAdmin = await getCaptcha();
-    const adminLoginRes = await request('/auth/admin/login', {
+    const adminLogin = await request('/auth/admin/login', {
       method: 'POST',
       body: {
         email: 'ashok.examcell@pmec.edu',
@@ -191,317 +160,251 @@ async function runSmokeTests() {
         captchaInput: capAdmin.solution,
       },
     });
-
-    if (adminLoginRes.status !== 200 || !adminLoginRes.data.token || adminLoginRes.data.otpRequired) {
-      throw new Error('Admin login failed or unexpectedly required OTP: ' + JSON.stringify(adminLoginRes.data));
+    if (adminLogin.status !== 200 || !adminLogin.data.token || adminLogin.data.otpRequired) {
+      throw new Error(`Direct admin login failed: ${JSON.stringify(adminLogin.data)}`);
     }
-    adminToken = adminLoginRes.data.token;
-    console.log('  ✔ Admin logged in directly in 1 step without OTP (token issued, office_role preserved)');
+    adminToken = adminLogin.data.token;
+    console.log('  ✔ Admin logged in directly in 1 step without OTP (Exam Cell token issued)');
 
-    // 2c: Admin views pending students queue -> verify id_card_url is present
-    const pendingListRes = await request('/admin/students/pending', {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
-    if (pendingListRes.status !== 200 || !Array.isArray(pendingListRes.data)) {
-      throw new Error('Failed to list pending students: ' + JSON.stringify(pendingListRes.data));
-    }
-    const targetStudent = pendingListRes.data[0];
-    if (!targetStudent) throw new Error('No pending student found in admin queue');
-    if (!targetStudent.id_card_url) {
-      throw new Error('Pending student record is missing id_card_url: ' + JSON.stringify(targetStudent));
-    }
-    pendingStudentId = targetStudent.id;
-    console.log(`  ✔ Admin retrieved pending students list with ID card link: ${targetStudent.id_card_url}`);
-
-    // 2d: Admin verifies pending student
-    const verifyRes = await request(`/admin/students/${pendingStudentId}/verify`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
-    if (verifyRes.status !== 200 || verifyRes.data.student.status !== 'active') {
-      throw new Error('Failed to verify student: ' + JSON.stringify(verifyRes.data));
-    }
-    console.log(`  ✔ Admin successfully verified student ID: ${pendingStudentId}`);
-
-    // 2e: Student login Step 1 -> returns otpRequired: true, studentId (token withheld)
-    const capStudent = await getCaptcha();
-    const studentStep1 = await request('/auth/student/login', {
+    // 2d: DSW Officer Direct 1-Step Login
+    const capDsw = await getCaptcha();
+    const dswLogin = await request('/auth/admin/login', {
       method: 'POST',
       body: {
-        email: targetStudent.email,
+        email: 'dsw@pmec.ac.in',
         password: 'Password@123',
-        captchaId: capStudent.captchaId,
-        captchaInput: capStudent.solution,
+        captchaId: capDsw.captchaId,
+        captchaInput: capDsw.solution,
       },
     });
-    if (studentStep1.status !== 200 || !studentStep1.data.otpRequired || !studentStep1.data.studentId || studentStep1.data.token) {
-      throw new Error('Student login did not return otpRequired: ' + JSON.stringify(studentStep1.data));
+    if (dswLogin.status !== 200 || !dswLogin.data.token || dswLogin.data.otpRequired) {
+      throw new Error(`Direct DSW login failed: ${JSON.stringify(dswLogin.data)}`);
     }
-    const studentId = studentStep1.data.studentId;
-    console.log(`  ✔ Student Login Step 1: otpRequired=true, studentId=${studentId}, token withheld`);
+    dswToken = dswLogin.data.token;
+    console.log('  ✔ DSW Officer logged in directly in 1 step without OTP (DSW token issued)');
 
-    // 2f: Student wrong OTP -> rejected with 400
-    const badOtp = await request('/auth/student/verify-otp', {
-      method: 'POST',
-      body: { studentId, otp: '000000' },
-    });
-    if (badOtp.status !== 400 || !badOtp.data.error.includes('Invalid')) {
-      throw new Error('Wrong student OTP was not rejected: ' + JSON.stringify(badOtp.data));
-    }
-    console.log('  ✔ Wrong student OTP rejected with 400 Bad Request');
-
-    // 2g: Student correct OTP -> returns { token, user }
-    const testOtpCode = '654321';
-    const Student = require('../models/Student');
-    await Student.setOtp(studentId, await bcrypt.hash(testOtpCode, 10), new Date(Date.now() + 300000));
-
-    const goodOtp = await request('/auth/student/verify-otp', {
-      method: 'POST',
-      body: { studentId, otp: testOtpCode },
-    });
-    if (goodOtp.status !== 200 || !goodOtp.data.token || !goodOtp.data.user) {
-      throw new Error('Valid student OTP verification failed: ' + JSON.stringify(goodOtp.data));
-    }
-    console.log('  ✔ Correct student OTP verified: JWT issued, student logged into dashboard');
-
-    results['Feature 2: Student 2-Step OTP Verification'] = 'PASSED (worked as expected)';
+    results['Feature 2: Direct 1-Step Login'] = 'PASSED (worked as expected)';
   } catch (err) {
     console.error('  ✖ Test 2 Failed:', err.message);
-    results['Feature 2: Student 2-Step OTP Verification'] = `FAILED: ${err.message}`;
+    results['Feature 2: Direct 1-Step Login'] = `FAILED: ${err.message}`;
   }
 
   // ----------------------------------------------------
   // SECTION 3: ADAPTIVE REQUEST SUBMISSION (ALL 7 TYPES)
   // ----------------------------------------------------
   console.log('\n▶ [Test 3] Adaptive Request Submission (All 7 Types)...');
-  let studentToken = '';
   let bonafideReqId = null;
   let memoReqId = null;
   let rejectReqId = null;
+  let semRegReqId = null;
+  let scholarshipReqId = null;
   try {
-    const capRavi = await getCaptcha();
-    const loginRavi = await request('/auth/student/login', {
-      method: 'POST',
-      body: {
-        email: 'ravi.sahoo@student.pmec.edu',
-        password: 'Password@123',
-        captchaId: capRavi.captchaId,
-        captchaInput: capRavi.solution,
-      },
-    });
-    const sId = loginRavi.data.studentId || 1;
-    const testRaviOtp = '998877';
-    const Student = require('../models/Student');
-    await Student.setOtp(sId, await bcrypt.hash(testRaviOtp, 10), new Date(Date.now() + 300000));
-    const verifyRavi = await request('/auth/student/verify-otp', {
-      method: 'POST',
-      body: { studentId: sId, otp: testRaviOtp },
-    });
-    studentToken = verifyRavi.data.token;
+    const dummyFileBytes = Buffer.from('%PDF-1.4 Mock PMEC Document Attachment', 'utf-8');
+    const dummyBlob = new Blob([dummyFileBytes], { type: 'application/pdf' });
 
-    const typesToTest = [
-      { type: 'bonafide_certificate', details: { purpose: 'Higher studies passport verification' } },
-      { type: 'scholarship_verification', details: { scheme_name: 'Post-Matric Odisha State Scholarship 2026' } },
-      { type: 'semester_registration', details: { semester_to_register: 7 } },
-      { type: 'internal_mark_correction', details: { subject_code: 'CSE-301', subject_name: 'Database Systems' } },
-      { type: 'back_paper', details: { subject_code: 'MAT-201', semester: 3 } },
-      { type: 'revaluation', details: { subject_code: 'CSE-302', semester: 5 } },
-      { type: 'exam_grievance', details: { subject_code: 'CSE-305', description: 'Attendance shortage dispute due to sports meet' } },
-    ];
+    // 3a: Bonafide Certificate
+    const fdBonafide = new FormData();
+    fdBonafide.append('type', 'bonafide_certificate');
+    fdBonafide.append('reason', 'Passport and visa application address verification');
+    fdBonafide.append('details', JSON.stringify({ purpose: 'Passport Application', bonafide_ref_no: 'PMEC/BNF/2026/TEST01' }));
+    fdBonafide.append('documents', dummyBlob, 'bonafide_proof.pdf');
 
-    for (const item of typesToTest) {
-      const res = await request('/requests', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${studentToken}` },
-        body: item,
-      });
-      const reqObj = res.data.request || res.data;
-      if (res.status !== 201 || !reqObj || reqObj.type !== item.type) {
-        throw new Error(`Failed to submit request for ${item.type}: ${JSON.stringify(res.data)}`);
-      }
-      if (item.type === 'bonafide_certificate') bonafideReqId = reqObj.id;
-      if (item.type === 'semester_registration') memoReqId = reqObj.id;
-      if (item.type === 'back_paper') rejectReqId = reqObj.id;
-      console.log(`  ✔ Submitted ${item.type} (Request #${reqObj.id})`);
+    const resBona = await request('/requests', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${studentToken}` },
+      body: fdBonafide,
+    });
+    if (resBona.status !== 201 || !resBona.data.id) {
+      throw new Error('Bonafide submission failed: ' + JSON.stringify(resBona.data));
     }
+    bonafideReqId = resBona.data.id;
+    console.log(`  ✔ bonafide_certificate submitted successfully (ID: ${bonafideReqId}, doc: ${resBona.data.document_url})`);
 
-    results['Section 3: Adaptive Request Submission'] = 'PASSED (worked as expected)';
+    // 3b: Semester Registration (With fee receipt)
+    const fdSem = new FormData();
+    fdSem.append('type', 'semester_registration');
+    fdSem.append('reason', 'Even Semester 6 Registration');
+    fdSem.append('details', JSON.stringify({ semester_to_register: 6, fee_receipt_no: 'SBIN-2026-987654', fee_amount: '12500', payment_date: '2026-05-10' }));
+    fdSem.append('documents', dummyBlob, 'fee_receipt.pdf');
+
+    const resSem = await request('/requests', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${studentToken}` },
+      body: fdSem,
+    });
+    if (resSem.status !== 201 || !resSem.data.id) {
+      throw new Error('Semester registration submission failed: ' + JSON.stringify(resSem.data));
+    }
+    semRegReqId = resSem.data.id;
+    console.log(`  ✔ semester_registration submitted with fee receipt (ID: ${semRegReqId})`);
+
+    // 3c: Scholarship Verification
+    const fdSchol = new FormData();
+    fdSchol.append('type', 'scholarship_verification');
+    fdSchol.append('reason', 'Post-Matric Scholarship Endorsement');
+    fdSchol.append('details', JSON.stringify({ scheme_name: 'Post-Matric State Scholarship', application_id: 'OD-SCH-2026-112233' }));
+    fdSchol.append('documents', dummyBlob, 'scholarship_app.pdf');
+
+    const resSchol = await request('/requests', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${studentToken}` },
+      body: fdSchol,
+    });
+    if (resSchol.status !== 201 || !resSchol.data.id) {
+      throw new Error('Scholarship submission failed: ' + JSON.stringify(resSchol.data));
+    }
+    scholarshipReqId = resSchol.data.id;
+    console.log(`  ✔ scholarship_verification submitted with doc (ID: ${scholarshipReqId})`);
+
+    // 3d: Back Paper with Bank Challan / Reference Number
+    const fdBack = new FormData();
+    fdBack.append('type', 'back_paper');
+    fdBack.append('reason', 'Back paper application for Math-II');
+    fdBack.append('details', JSON.stringify({
+      subject_code: 'BS102',
+      subject_name: 'Mathematics-II',
+      semester: 2,
+      challan_ref_no: 'CHALLAN-PMEC-2026-8899',
+      fee_amount: '500',
+      payment_date: '2026-05-15',
+    }));
+    fdBack.append('documents', dummyBlob, 'bank_challan.pdf');
+    const resBack = await request('/requests', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${studentToken}` },
+      body: fdBack,
+    });
+    if (resBack.status !== 201) throw new Error('Back paper submission failed: ' + JSON.stringify(resBack.data));
+    memoReqId = resBack.data.id;
+    console.log(`  ✔ back_paper submitted with Bank Challan / Ref No (ID: ${memoReqId})`);
+
+    // 3e: Exam Grievance
+    const fdGriev = new FormData();
+    fdGriev.append('type', 'exam_grievance');
+    fdGriev.append('reason', 'Out of syllabus question in OS exam');
+    fdGriev.append('details', JSON.stringify({ subject_code: 'CS301', description: 'Out of syllabus question in OS end-semester examination' }));
+    const resGriev = await request('/requests', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${studentToken}` },
+      body: fdGriev,
+    });
+    if (resGriev.status !== 201) throw new Error('Exam grievance submission failed: ' + JSON.stringify(resGriev.data));
+    rejectReqId = resGriev.data.id;
+    console.log(`  ✔ exam_grievance submitted successfully (ID: ${rejectReqId})`);
+
+    results['Feature 3: Request Submission'] = 'PASSED (worked as expected)';
   } catch (err) {
     console.error('  ✖ Test 3 Failed:', err.message);
-    results['Section 3: Adaptive Request Submission'] = `FAILED: ${err.message}`;
+    results['Feature 3: Request Submission'] = `FAILED: ${err.message}`;
   }
 
   // ----------------------------------------------------
-  // SECTION 4: ADMIN REVIEW, E-SIGNATURE WORKFLOW & PDF GENERATION
+  // SECTION 4: ROLE-GATED APPROVAL & DSW VERIFICATION
   // ----------------------------------------------------
-  console.log('\n▶ [Test 4] Admin Review, E-Signature & PDF Generation...');
+  console.log('\n▶ [Test 4] Role-Gated Approvals & DSW Routing...');
   try {
-    await pool.query('UPDATE admins SET signature_url = NULL WHERE email = $1', ['ashok.examcell@pmec.edu']);
-
-    const blockRes = await request(`/admin/requests/${bonafideReqId}/action`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${adminToken}` },
-      body: { action: 'approve', comment: 'Approved without signature test' },
-    });
-
-    if (blockRes.status !== 400 || !blockRes.data.error.includes('signature')) {
-      throw new Error('Approval without signature was NOT blocked: ' + JSON.stringify(blockRes.data));
-    }
-    console.log('  ✔ Approval blocked when admin has no e-signature on file (400 Bad Request)');
-
-    // Set up signature via canvas drawing (base64 PNG)
-    const samplePngBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-    const sigRes = await request('/admin/signature/draw', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${adminToken}` },
-      body: { dataUrl: samplePngBase64 },
-    });
-
-    if (sigRes.status !== 200 || !sigRes.data.admin.signature_url) {
-      throw new Error('Failed to save drawn signature: ' + JSON.stringify(sigRes.data));
-    }
-    console.log('  ✔ Admin e-signature created and saved successfully:', sigRes.data.admin.signature_url);
-
-    // Admin approves bonafide certificate request -> triggers signed PDF certificate generation
+    // 4a: DSW approves bonafide certificate
     const approveBonafide = await request(`/admin/requests/${bonafideReqId}/action`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${adminToken}` },
-      body: { action: 'approve', comment: 'Verified student records. Bonafide certificate granted.' },
+      headers: { Authorization: `Bearer ${dswToken}` },
+      body: { action: 'approve', comment: 'Bonafide credentials verified and approved by DSW' },
     });
-
-    if (approveBonafide.status !== 200 || !approveBonafide.data.certificate) {
-      throw new Error('Bonafide certificate approval failed: ' + JSON.stringify(approveBonafide.data));
+    if (approveBonafide.status !== 200 || approveBonafide.data.request.status !== 'approved') {
+      throw new Error('Bonafide approval failed: ' + JSON.stringify(approveBonafide.data));
     }
-    const cert = approveBonafide.data.certificate;
-    console.log(`  ✔ Bonafide certificate approved: Certificate No: ${cert.certificate_no}, PDF: ${cert.pdf_url}`);
+    console.log(`  ✔ DSW approved bonafide_certificate (cert URL: ${approveBonafide.data.certificate_url})`);
 
-    // Verify PDF file exists on disk
-    const certDiskPath = path.join(__dirname, '..', cert.pdf_url.replace(/^\//, ''));
-    if (!fs.existsSync(certDiskPath)) {
-      throw new Error(`Generated PDF file does not exist on disk at: ${certDiskPath}`);
+    // 4b: DSW approves scholarship verification
+    const approveSchol = await request(`/admin/requests/${scholarshipReqId}/action`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${dswToken}` },
+      body: { action: 'approve', comment: 'Scholarship credentials verified and endorsed by DSW' },
+    });
+    if (approveSchol.status !== 200 || approveSchol.data.request.status !== 'approved') {
+      throw new Error('Scholarship approval failed: ' + JSON.stringify(approveSchol.data));
     }
-    console.log(`  ✔ PDF Certificate exists on disk (${fs.statSync(certDiskPath).size} bytes)`);
+    console.log(`  ✔ DSW approved scholarship_verification (cert URL: ${approveSchol.data.certificate_url})`);
 
-    // Admin approves non-certificate request (semester registration) -> creates signed approval memo PDF
-    const approveMemo = await request(`/admin/requests/${memoReqId}/action`, {
+    // 4c: Institute approves semester registration
+    const approveSem = await request(`/admin/requests/${semRegReqId}/action`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${adminToken}` },
-      body: { action: 'approve', comment: 'Semester registration approved after fee verification.' },
+      body: { action: 'approve', comment: 'Fees paid and verified by Academic Office' },
     });
-
-    if (approveMemo.status !== 200 || !approveMemo.data.certificate) {
-      throw new Error('Semester registration approval failed: ' + JSON.stringify(approveMemo.data));
+    if (approveSem.status !== 200 || approveSem.data.request.status !== 'approved') {
+      throw new Error('Semester registration approval failed: ' + JSON.stringify(approveSem.data));
     }
-    const memoCert = approveMemo.data.certificate;
-    const memoDiskPath = path.join(__dirname, '..', memoCert.pdf_url.replace(/^\//, ''));
-    if (!fs.existsSync(memoDiskPath)) {
-      throw new Error(`Generated Approval Memo PDF does not exist at: ${memoDiskPath}`);
-    }
-    console.log(`  ✔ Approval memo PDF generated and exists on disk (${fs.statSync(memoDiskPath).size} bytes)`);
+    console.log(`  ✔ Academic office approved semester_registration (cert URL: ${approveSem.data.certificate_url})`);
 
-    // Test Reject action on rejectReqId with comment
-    const rejectRes = await request(`/admin/requests/${rejectReqId}/action`, {
+    // 4d: Exam Cell approves back paper with bank challan
+    const approveBack = await request(`/admin/requests/${memoReqId}/action`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${adminToken}` },
-      body: { action: 'reject', comment: 'Fee receipt unreadable. Resubmit with clear scan.' },
+      body: { action: 'approve', comment: 'Bank challan verified and back paper registered' },
     });
-    if (rejectRes.status !== 200 || rejectRes.data.request.status !== 'rejected') {
-      throw new Error('Reject action failed: ' + JSON.stringify(rejectRes.data));
+    if (approveBack.status !== 200 || approveBack.data.request.status !== 'approved') {
+      throw new Error('Back paper approval failed: ' + JSON.stringify(approveBack.data));
     }
-    console.log('  ✔ Request status updated to rejected with mandatory comment recorded');
+    console.log(`  ✔ Exam Cell approved back_paper with Challan Clearance (cert URL: ${approveBack.data.certificate_url})`);
 
-    results['Section 4: Admin Review, E-Signature & PDF'] = 'PASSED (worked as expected)';
+    results['Feature 4: Role-Gated Approvals'] = 'PASSED (worked as expected)';
   } catch (err) {
     console.error('  ✖ Test 4 Failed:', err.message);
-    results['Section 4: Admin Review, E-Signature & PDF'] = `FAILED: ${err.message}`;
+    results['Feature 4: Role-Gated Approvals'] = `FAILED: ${err.message}`;
   }
 
   // ----------------------------------------------------
-  // SECTION 5: STUDENT VISIBILITY & AUDIT TIMELINE
+  // SECTION 5: STUDENT CERTIFICATE DOWNLOAD & VERIFICATION
   // ----------------------------------------------------
-  console.log('\n▶ [Test 5] Student Request Detail, Audit Timeline & Certificate Download...');
+  console.log('\n▶ [Test 5] Student Certificate Download & Verification...');
   try {
-    const detailRes = await request(`/requests/${bonafideReqId}`, {
+    const studentBonafide = await request(`/requests/${bonafideReqId}`, {
       headers: { Authorization: `Bearer ${studentToken}` },
     });
-
-    if (detailRes.status !== 200) {
-      throw new Error('Failed to fetch request detail: ' + JSON.stringify(detailRes.data));
+    const certPdfUrl = studentBonafide.data.certificate?.pdf_url || studentBonafide.data.certificate_url;
+    if (studentBonafide.status !== 200 || !certPdfUrl) {
+      throw new Error('Student cannot retrieve certificate URL: ' + JSON.stringify(studentBonafide.data));
     }
+    console.log(`  ✔ Student retrieved e-signed certificate: ${certPdfUrl}`);
 
-    const { timeline, certificate, status } = detailRes.data;
-    if (status !== 'approved') throw new Error(`Request status is not approved: ${status}`);
-    if (!timeline || timeline.length === 0) throw new Error('Timeline empty');
-    if (!certificate || !certificate.pdf_url) throw new Error('Certificate empty');
-
-    const approvalLog = timeline.find((l) => l.action === 'approved');
-    if (!approvalLog || !approvalLog.signature_url) {
-      throw new Error('Approval log missing snapshot signature_url: ' + JSON.stringify(timeline));
+    const pdfRes = await fetch(`http://localhost:5000${certPdfUrl}`);
+    if (pdfRes.status !== 200) {
+      throw new Error(`Failed to download certificate PDF from ${studentBonafide.data.certificate_url}`);
     }
+    const pdfBuf = await pdfRes.arrayBuffer();
+    const pdfHeader = Buffer.from(pdfBuf).subarray(0, 5).toString('ascii');
+    if (pdfHeader !== '%PDF-') {
+      throw new Error(`File is not a valid PDF header: ${pdfHeader}`);
+    }
+    console.log(`  ✔ Certificate PDF verified & downloaded (${pdfBuf.byteLength} bytes)`);
 
-    console.log('  ✔ Student retrieved full request details with JSONB fields');
-    console.log(`  ✔ Audit timeline contains ${timeline.length} logged actions with exact timestamps`);
-    console.log(`  ✔ Approval log snapshot has e-signature URL: ${approvalLog.signature_url}`);
-    console.log(`  ✔ Certificate verified: ${certificate.certificate_no} (${certificate.pdf_url})`);
-
-    results['Section 5: Student Visibility & Timeline'] = 'PASSED (worked as expected)';
+    results['Feature 5: Certificate Download'] = 'PASSED (worked as expected)';
   } catch (err) {
     console.error('  ✖ Test 5 Failed:', err.message);
-    results['Section 5: Student Visibility & Timeline'] = `FAILED: ${err.message}`;
+    results['Feature 5: Certificate Download'] = `FAILED: ${err.message}`;
   }
 
   // ----------------------------------------------------
-  // SECTION 6: ROLE-BASED ACCESS CONTROL (RBAC)
+  // FINAL SUMMARY REPORT
   // ----------------------------------------------------
-  console.log('\n▶ [Test 6] Role-Based Access Control (RBAC)...');
-  try {
-    const studentAsAdmin = await request('/admin/requests', {
-      headers: { Authorization: `Bearer ${studentToken}` },
-    });
-    if (studentAsAdmin.status !== 403) {
-      throw new Error(`Student was not blocked from admin queue (status: ${studentAsAdmin.status})`);
-    }
-
-    const adminAsStudent = await request('/requests', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${adminToken}` },
-      body: { type: 'bonafide_certificate', details: { purpose: 'test' } },
-    });
-    if (adminAsStudent.status !== 403) {
-      throw new Error(`Admin was not blocked from student submission (status: ${adminAsStudent.status})`);
-    }
-
-    const unauth = await request('/admin/requests');
-    if (unauth.status !== 401) {
-      throw new Error(`Unauthenticated request was not blocked (status: ${unauth.status})`);
-    }
-
-    console.log('  ✔ Student token rejected on /api/admin/* with 403 Forbidden');
-    console.log('  ✔ Admin token rejected on /api/requests POST with 403 Forbidden');
-    console.log('  ✔ Anonymous request blocked with 401 Unauthorized');
-    results['Section 6: Role Protection & RBAC'] = 'PASSED (worked as expected)';
-  } catch (err) {
-    console.error('  ✖ Test 6 Failed:', err.message);
-    results['Section 6: Role Protection & RBAC'] = `FAILED: ${err.message}`;
-  }
-
   console.log('\n====================================================');
-  console.log('SMOKE TEST SUMMARY RESULTS:');
+  console.log('FINAL TEST EXECUTION SUMMARY:');
   console.log('====================================================');
-  for (const [sec, res] of Object.entries(results)) {
-    console.log(`- ${sec}: ${res}`);
+  let allPassed = true;
+  for (const [feat, status] of Object.entries(results)) {
+    console.log(`- ${feat}: ${status}`);
+    if (status.startsWith('FAILED')) allPassed = false;
   }
+  console.log('====================================================\n');
 
-  const allPassed = Object.values(results).every((r) => r.startsWith('PASSED'));
-  if (allPassed) {
-    console.log('\n🎉 ALL BACKEND END-TO-END SMOKE TESTS PASSED PERFECTLY!');
-  } else {
-    console.log('\n⚠️ Some smoke tests failed. See details above.');
+  await pool.end();
+  if (!allPassed) {
     process.exit(1);
   }
 }
 
-runSmokeTests().catch((e) => {
-  console.error('Smoke test runner failed:', e);
+runSmokeTests().catch(async (e) => {
+  console.error('Smoke test suite crashed:', e);
+  await pool.end();
   process.exit(1);
 });

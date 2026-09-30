@@ -23,7 +23,7 @@ export default function RequestCard({ request, to }) {
           <p className="font-semibold text-slate-800">{TYPE_LABELS[request.type] || request.type}</p>
           <p className="text-xs text-slate-500 mt-1">Request #{request.id}</p>
           {request.student_name && (
-            <p className="text-xs text-slate-500">{request.student_name} ({request.roll_no})</p>
+            <p className="text-xs text-slate-500">{request.student_name} (Reg No: {request.roll_no})</p>
           )}
         </div>
         <StatusBadge status={request.status} />

@@ -78,6 +78,16 @@ const Student = {
       [id]
     );
   },
+  async activateAfterOtp(id, status = 'active') {
+    const { rows } = await db.query(
+      `UPDATE students
+       SET status = $1, otp_code_hash = NULL, otp_expires_at = NULL, otp_attempts = 0
+       WHERE id = $2
+       RETURNING id, roll_no, name, department, semester, email, phone, status, id_card_url`,
+      [status, id]
+    );
+    return rows[0];
+  },
 };
 
 module.exports = Student;

@@ -31,13 +31,18 @@ const REQUEST_TYPES = [
   },
   {
     value: 'back_paper',
-    label: 'Back Paper',
+    label: 'Back Paper Registration (with Bank Challan / Reference)',
     fields: [
       { name: 'subject_code', label: 'Subject Code', type: 'text', required: true },
-      { name: 'semester', label: 'Semester', type: 'number', required: true },
+      { name: 'subject_name', label: 'Subject Name', type: 'text', required: true },
+      { name: 'semester', label: 'Semester (1-12)', type: 'number', required: true },
+      { name: 'challan_ref_no', label: 'Bank Challan / Fee Reference Number', type: 'text', required: true },
+      { name: 'fee_amount', label: 'Challan Fee Amount Paid (INR)', type: 'number', required: true },
+      { name: 'payment_date', label: 'Payment / Challan Date', type: 'date', required: true },
     ],
     requiresDocument: true,
-    docLabel: 'Previous mark sheet (optional)',
+    docLabel: 'Upload Bank Challan Receipt / SB Collect Proof (PDF / Image)',
+    documentRequired: true,
   },
   {
     value: 'revaluation',
