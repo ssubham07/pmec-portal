@@ -13,10 +13,10 @@ app.use(cors({ origin: process.env.CLIENT_ORIGIN || '*' }));
 app.use(express.json({ limit: '5mb' })); // 5mb to allow base64 signature drawings
 app.use(express.urlencoded({ extended: true }));
 
-// Serve uploaded documents / signatures / certificates statically
+// Serve uploaded documents / signatures / certificates / id_cards statically
 const fs = require('fs');
 const uploadDir = path.join(__dirname, process.env.UPLOAD_DIR || 'uploads');
-['documents', 'signatures', 'certificates'].forEach((sub) => {
+['documents', 'signatures', 'certificates', 'id_cards'].forEach((sub) => {
   fs.mkdirSync(path.join(uploadDir, sub), { recursive: true });
 });
 app.use('/uploads', express.static(uploadDir));

@@ -1,12 +1,23 @@
 const express = require('express');
 const router = express.Router();
-const { registerStudent, loginStudent, loginAdmin, me, getCaptcha } = require('../controllers/authController');
+const {
+  registerStudent,
+  loginStudent,
+  loginAdmin,
+  verifyAdminOtp,
+  resendAdminOtp,
+  me,
+  getCaptcha,
+} = require('../controllers/authController');
 const { authenticate } = require('../middleware/auth');
+const { uploadIdCard } = require('../middleware/upload');
 
 router.get('/captcha', getCaptcha);
-router.post('/student/register', registerStudent);
+router.post('/student/register', uploadIdCard.single('id_card'), registerStudent);
 router.post('/student/login', loginStudent);
 router.post('/admin/login', loginAdmin);
+router.post('/admin/verify-otp', verifyAdminOtp);
+router.post('/admin/resend-otp', resendAdminOtp);
 router.get('/me', authenticate, me);
 
 module.exports = router;

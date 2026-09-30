@@ -171,6 +171,26 @@ async function verifyStudent(req, res) {
   }
 }
 
+async function rejectStudent(req, res) {
+  try {
+    const student = await Student.reject(req.params.id);
+    if (!student) return res.status(404).json({ error: 'Student not found.' });
+
+    const message = `Dear ${student.name}, your account registration on the PMEC Student Service Request Portal was reviewed and rejected by the Institute.`;
+    await Notification.create({ student_id: student.id, request_id: null, message });
+    sendMail({
+      to: student.email,
+      subject: 'Account Registration Rejected - PMEC Portal',
+      text: message,
+    });
+
+    res.json({ message: 'Student verification rejected.', student });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reject student.' });
+  }
+}
+
 module.exports = {
   listQueue,
   actOnRequest,
@@ -179,5 +199,6 @@ module.exports = {
   saveDrawnSignature,
   listPendingStudents,
   verifyStudent,
+  rejectStudent,
   CERTIFICATE_TYPES,
 };

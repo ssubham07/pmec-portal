@@ -10,6 +10,7 @@ const {
   saveDrawnSignature,
   listPendingStudents,
   verifyStudent,
+  rejectStudent,
 } = require('../controllers/adminController');
 
 router.use(authenticate, requireRole('admin'));
@@ -21,6 +22,7 @@ router.get('/requests/:id/audit-log', getAuditLog);
 // Student verification routes
 router.get('/students/pending', listPendingStudents);
 router.post('/students/:id/verify', verifyStudent);
+router.post('/students/:id/reject', rejectStudent);
 
 // e-signature setup: either upload a scanned/photographed signature image,
 // or POST a base64 PNG captured from a signature-pad <canvas> on the frontend.

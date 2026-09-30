@@ -15,6 +15,7 @@ const initialForm = {
 
 export default function Register() {
   const [form, setForm] = useState(initialForm);
+  const [idCard, setIdCard] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [pendingNotice, setPendingNotice] = useState(null);
@@ -28,11 +29,26 @@ export default function Register() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+
+    if (!idCard) {
+      setError('Please upload your College ID Card (PDF / JPG / PNG).');
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data } = await api.post('/auth/student/register', {
-        ...form,
-        semester: Number(form.semester),
+      const formData = new FormData();
+      formData.append('roll_no', form.roll_no);
+      formData.append('name', form.name);
+      formData.append('department', form.department);
+      formData.append('semester', Number(form.semester));
+      formData.append('email', form.email);
+      formData.append('phone', form.phone || '');
+      formData.append('password', form.password);
+      formData.append('id_card', idCard);
+
+      const { data } = await api.post('/auth/student/register', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
       if (data.pendingVerification) {
@@ -161,6 +177,22 @@ export default function Register() {
               onChange={(e) => update('phone', e.target.value)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2a52]"
             />
+          </div>
+
+          <div className="col-span-2">
+            <label className="block font-semibold text-slate-700 mb-1">
+              College ID Card (PDF / JPG / PNG, Max 5MB) *
+            </label>
+            <input
+              type="file"
+              required
+              accept=".pdf,image/png,image/jpeg,image/jpg"
+              onChange={(e) => setIdCard(e.target.files[0] || null)}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#0f2a52]"
+            />
+            <span className="text-[11px] text-slate-400 mt-0.5 block">
+              Required for all students. Verified by the Institute for academic validation.
+            </span>
           </div>
 
           <div className="col-span-2">

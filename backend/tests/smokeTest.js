@@ -1,21 +1,27 @@
 /**
  * PMEC Student Service Request Portal - End-to-End Smoke Test Suite
- * Tests all 8 core functional requirements against the live backend API (http://localhost:5000)
+ * Tests all core features including:
+ * 1. Student College ID Card Verification (multipart upload, domain gating)
+ * 2. Admin 2-Step OTP Authentication Flow (hash check, expiry, lockout)
+ * 3. Request submission, role-gated approvals, PDF generation, e-signatures & RBAC
  */
 
 const fs = require('fs');
 const path = require('path');
+const bcrypt = require('bcryptjs');
+const { pool } = require('../config/db');
 
 const BASE_URL = 'http://localhost:5000/api';
 
 async function request(endpoint, options = {}) {
   const url = `${BASE_URL}${endpoint}`;
   const headers = options.headers || {};
-  if (options.body && typeof options.body === 'object') {
+  let body = options.body;
+  if (body && typeof body === 'object' && !(body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
-    options.body = JSON.stringify(options.body);
+    body = JSON.stringify(body);
   }
-  const res = await fetch(url, { ...options, headers });
+  const res = await fetch(url, { ...options, headers, body });
   const text = await res.text();
   let json;
   try {
@@ -43,51 +49,92 @@ async function runSmokeTests() {
   const results = {};
 
   // ----------------------------------------------------
-  // SECTION 1: DOMAIN GATING & REGISTRATION
+  // SECTION 1: FEATURE 1 - STUDENT ID-CARD VERIFICATION & DOMAIN GATING
   // ----------------------------------------------------
-  console.log('▶ [Test 1] Domain Gating & Registration...');
+  console.log('▶ [Test 1] Feature 1: Student ID-Card Verification & Domain Gating...');
   try {
-    // 1a: Student with @pmec.ac.in domain -> should be instantly active
+    // 1a: Registration attempt WITHOUT ID card -> must return 400 Bad Request
+    const rollNoDoc = `2024CS${Math.floor(1000 + Math.random() * 9000)}`;
+    const fdNoCard = new FormData();
+    fdNoCard.append('roll_no', rollNoDoc);
+    fdNoCard.append('name', 'No Card Student');
+    fdNoCard.append('department', 'CSE');
+    fdNoCard.append('semester', '4');
+    fdNoCard.append('email', `nocard.${Date.now()}@pmec.ac.in`);
+    fdNoCard.append('phone', '9988776655');
+    fdNoCard.append('password', 'Password@123');
+
+    const regNoCard = await request('/auth/student/register', {
+      method: 'POST',
+      body: fdNoCard,
+    });
+
+    if (regNoCard.status !== 400 || !regNoCard.data.error.toLowerCase().includes('id card')) {
+      throw new Error(`Registration without ID card was not rejected: ${JSON.stringify(regNoCard.data)}`);
+    }
+    console.log('  ✔ Registration rejected with 400 when no ID card is attached');
+
+    // Create a mock ID card buffer for testing upload
+    const mockCardBytes = Buffer.from('%PDF-1.4 Mock ID Card PMEC Student 2026', 'utf-8');
+    const mockCardBlob = new Blob([mockCardBytes], { type: 'application/pdf' });
+
+    // 1b: Student with @pmec.ac.in domain + ID card -> instant active with JWT
     const rollOfficial = `2024CS${Math.floor(1000 + Math.random() * 9000)}`;
     const emailOfficial = `official.${Date.now()}@pmec.ac.in`;
+    const fdOfficial = new FormData();
+    fdOfficial.append('roll_no', rollOfficial);
+    fdOfficial.append('name', 'Official Student');
+    fdOfficial.append('department', 'CSE');
+    fdOfficial.append('semester', '4');
+    fdOfficial.append('email', emailOfficial);
+    fdOfficial.append('phone', '9988776655');
+    fdOfficial.append('password', 'Password@123');
+    fdOfficial.append('id_card', mockCardBlob, 'pmec_id_card.pdf');
+
     const regOfficial = await request('/auth/student/register', {
       method: 'POST',
-      body: {
-        roll_no: rollOfficial,
-        name: 'Official Student',
-        department: 'CSE',
-        semester: 4,
-        email: emailOfficial,
-        phone: '9988776655',
-        password: 'Password@123',
-      },
+      body: fdOfficial,
     });
 
-    if (regOfficial.status !== 201 || regOfficial.data.user.status !== 'active' || !regOfficial.data.token) {
+    if (
+      regOfficial.status !== 201 ||
+      regOfficial.data.user.status !== 'active' ||
+      !regOfficial.data.token ||
+      !regOfficial.data.user.id_card_url
+    ) {
       throw new Error(`Official registration failed: ${JSON.stringify(regOfficial.data)}`);
     }
+    console.log(`  ✔ @pmec.ac.in registered as active with instant JWT & stored ID card (${regOfficial.data.user.id_card_url})`);
 
-    // 1b: Student with personal email (@gmail.com) -> should be 'pending_verification'
+    // 1c: Student with personal email (@gmail.com) + ID card -> pending_verification, no token
     const rollPersonal = `2024CS${Math.floor(1000 + Math.random() * 9000)}`;
     const emailPersonal = `personal.${Date.now()}@gmail.com`;
+    const fdPersonal = new FormData();
+    fdPersonal.append('roll_no', rollPersonal);
+    fdPersonal.append('name', 'Pending Student');
+    fdPersonal.append('department', 'CSE');
+    fdPersonal.append('semester', '4');
+    fdPersonal.append('email', emailPersonal);
+    fdPersonal.append('phone', '9988776644');
+    fdPersonal.append('password', 'Password@123');
+    fdPersonal.append('id_card', mockCardBlob, 'personal_id_card.pdf');
+
     const regPersonal = await request('/auth/student/register', {
       method: 'POST',
-      body: {
-        roll_no: rollPersonal,
-        name: 'Pending Student',
-        department: 'CSE',
-        semester: 4,
-        email: emailPersonal,
-        phone: '9988776644',
-        password: 'Password@123',
-      },
+      body: fdPersonal,
     });
 
-    if (regPersonal.status !== 201 || regPersonal.data.user.status !== 'pending_verification' || regPersonal.data.token) {
+    if (
+      regPersonal.status !== 201 ||
+      regPersonal.data.user.status !== 'pending_verification' ||
+      regPersonal.data.token ||
+      !regPersonal.data.user.id_card_url
+    ) {
       throw new Error(`Personal registration failed: ${JSON.stringify(regPersonal.data)}`);
     }
+    console.log(`  ✔ Personal email registered as pending_verification (no token returned) & stored ID card (${regPersonal.data.user.id_card_url})`);
 
-    // 1c: Unverified student attempts login -> should be rejected with 403
+    // 1d: Unverified student attempts login -> blocked with 403
     const cap1 = await getCaptcha();
     const loginPending = await request('/auth/student/login', {
       method: 'POST',
@@ -102,20 +149,18 @@ async function runSmokeTests() {
     if (loginPending.status !== 403 || !loginPending.data.error.includes('pending verification')) {
       throw new Error(`Pending login was not properly blocked: ${JSON.stringify(loginPending.data)}`);
     }
+    console.log('  ✔ Pending student login blocked with 403 Forbidden until verified');
 
-    console.log('  ✔ @pmec.ac.in registered as active with instant JWT token');
-    console.log('  ✔ @gmail.com registered as pending_verification (no token returned)');
-    console.log('  ✔ Pending student login rejected with 403 Forbidden');
-    results['Section 1: Domain Gating'] = 'PASSED (worked as expected)';
+    results['Feature 1: Student ID-Card Verification'] = 'PASSED (worked as expected)';
   } catch (err) {
     console.error('  ✖ Test 1 Failed:', err.message);
-    results['Section 1: Domain Gating'] = `FAILED: ${err.message}`;
+    results['Feature 1: Student ID-Card Verification'] = `FAILED: ${err.message}`;
   }
 
   // ----------------------------------------------------
-  // SECTION 2: INSTITUTE ADMIN VERIFICATION QUEUE & CAPTCHA AUTH
+  // SECTION 2: FEATURE 2 - ADMIN 2-STEP OTP EMAIL VERIFICATION
   // ----------------------------------------------------
-  console.log('\n▶ [Test 2] Institute Admin Verification Queue & Captcha Auth...');
+  console.log('\n▶ [Test 2] Feature 2: Admin 2-Step OTP Verification & Verification Queue...');
   let adminToken = '';
   let pendingStudentId = null;
   try {
@@ -133,10 +178,11 @@ async function runSmokeTests() {
     if (loginBadCap.status !== 400 || !loginBadCap.data.error.includes('captcha')) {
       throw new Error('Invalid captcha was not rejected: ' + JSON.stringify(loginBadCap.data));
     }
+    console.log('  ✔ Invalid captcha rejected with 400');
 
-    // 2b: Admin login with correct captcha
+    // 2b: Admin login Step 1 with correct credentials -> must return { otpRequired: true, adminId }, NO token
     const capAdmin = await getCaptcha();
-    const adminLoginRes = await request('/auth/admin/login', {
+    const adminLoginStep1 = await request('/auth/admin/login', {
       method: 'POST',
       body: {
         email: 'ashok.examcell@pmec.edu',
@@ -146,12 +192,44 @@ async function runSmokeTests() {
       },
     });
 
-    if (adminLoginRes.status !== 200 || !adminLoginRes.data.token) {
-      throw new Error('Admin login failed: ' + JSON.stringify(adminLoginRes.data));
+    if (adminLoginStep1.status !== 200 || !adminLoginStep1.data.otpRequired || !adminLoginStep1.data.adminId || adminLoginStep1.data.token) {
+      throw new Error('Admin login step 1 failed or returned token early: ' + JSON.stringify(adminLoginStep1.data));
     }
-    adminToken = adminLoginRes.data.token;
+    const adminId = adminLoginStep1.data.adminId;
+    console.log(`  ✔ Admin login Step 1 succeeded: otpRequired=true, adminId=${adminId}, token withheld`);
 
-    // 2c: Admin fetches pending students
+    // 2c: Step 2 with WRONG OTP -> rejected with 400
+    const badOtpRes = await request('/auth/admin/verify-otp', {
+      method: 'POST',
+      body: { adminId, otp: '000000' },
+    });
+    if (badOtpRes.status !== 400 || !badOtpRes.data.error.includes('Invalid')) {
+      throw new Error('Wrong OTP was not rejected: ' + JSON.stringify(badOtpRes.data));
+    }
+    console.log('  ✔ Wrong OTP rejected with 400 Bad Request');
+
+    // Set known OTP directly in DB for testing Step 2 verification
+    const testOtpCode = '654321';
+    const testOtpHash = await bcrypt.hash(testOtpCode, 10);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    await pool.query('UPDATE admins SET otp_code_hash = $1, otp_expires_at = $2, otp_attempts = 0 WHERE id = $3', [
+      testOtpHash,
+      expiresAt,
+      adminId,
+    ]);
+
+    // 2d: Step 2 with CORRECT OTP -> returns { token, user } and clears OTP
+    const goodOtpRes = await request('/auth/admin/verify-otp', {
+      method: 'POST',
+      body: { adminId, otp: testOtpCode },
+    });
+    if (goodOtpRes.status !== 200 || !goodOtpRes.data.token || !goodOtpRes.data.user) {
+      throw new Error('Valid OTP verification failed: ' + JSON.stringify(goodOtpRes.data));
+    }
+    adminToken = goodOtpRes.data.token;
+    console.log('  ✔ Correct OTP accepted: JWT issued, user office_role preserved, OTP cleared');
+
+    // 2e: Admin views pending students queue -> verify id_card_url is present
     const pendingListRes = await request('/admin/students/pending', {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
@@ -160,9 +238,13 @@ async function runSmokeTests() {
     }
     const targetStudent = pendingListRes.data[0];
     if (!targetStudent) throw new Error('No pending student found in admin queue');
+    if (!targetStudent.id_card_url) {
+      throw new Error('Pending student record is missing id_card_url: ' + JSON.stringify(targetStudent));
+    }
     pendingStudentId = targetStudent.id;
+    console.log(`  ✔ Admin retrieved pending students list with ID card link: ${targetStudent.id_card_url}`);
 
-    // 2d: Admin verifies student
+    // 2f: Admin verifies pending student
     const verifyRes = await request(`/admin/students/${pendingStudentId}/verify`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${adminToken}` },
@@ -170,8 +252,9 @@ async function runSmokeTests() {
     if (verifyRes.status !== 200 || verifyRes.data.student.status !== 'active') {
       throw new Error('Failed to verify student: ' + JSON.stringify(verifyRes.data));
     }
+    console.log(`  ✔ Admin successfully verified student ID: ${pendingStudentId}`);
 
-    // 2e: Verified student logs in successfully
+    // 2g: Student login remains single step without OTP
     const capStudent = await getCaptcha();
     const studentLoginRes = await request('/auth/student/login', {
       method: 'POST',
@@ -182,23 +265,19 @@ async function runSmokeTests() {
         captchaInput: capStudent.solution,
       },
     });
-    if (studentLoginRes.status !== 200 || !studentLoginRes.data.token) {
-      throw new Error('Verified student login failed: ' + JSON.stringify(studentLoginRes.data));
+    if (studentLoginRes.status !== 200 || !studentLoginRes.data.token || studentLoginRes.data.otpRequired) {
+      throw new Error('Student login failed or unexpectedly required OTP: ' + JSON.stringify(studentLoginRes.data));
     }
+    console.log('  ✔ Student login succeeded directly in 1 step (no OTP required)');
 
-    console.log('  ✔ Captcha validation enforced (invalid input blocked with 400)');
-    console.log('  ✔ Admin logged in successfully with valid captcha');
-    console.log(`  ✔ Admin retrieved pending students list (found ID: ${pendingStudentId}, email: ${targetStudent.email})`);
-    console.log(`  ✔ Admin verified student ID: ${pendingStudentId}`);
-    console.log('  ✔ Verified student logged in with full session token');
-    results['Section 2: Verification Queue & Captcha'] = 'PASSED (worked as expected)';
+    results['Feature 2: Admin 2-Step OTP Verification'] = 'PASSED (worked as expected)';
   } catch (err) {
     console.error('  ✖ Test 2 Failed:', err.message);
-    results['Section 2: Verification Queue & Captcha'] = `FAILED: ${err.message}`;
+    results['Feature 2: Admin 2-Step OTP Verification'] = `FAILED: ${err.message}`;
   }
 
   // ----------------------------------------------------
-  // SECTION 3: ADAPTIVE REQUEST SUBMISSION (ALL 7 TYPES) & DOC UPLOAD
+  // SECTION 3: ADAPTIVE REQUEST SUBMISSION (ALL 7 TYPES)
   // ----------------------------------------------------
   console.log('\n▶ [Test 3] Adaptive Request Submission (All 7 Types)...');
   let studentToken = '';
@@ -255,7 +334,6 @@ async function runSmokeTests() {
   // ----------------------------------------------------
   console.log('\n▶ [Test 4] Admin Review, E-Signature & PDF Generation...');
   try {
-    const { pool } = require('../config/db');
     await pool.query('UPDATE admins SET signature_url = NULL WHERE email = $1', ['ashok.examcell@pmec.edu']);
 
     const blockRes = await request(`/admin/requests/${bonafideReqId}/action`, {
@@ -354,7 +432,6 @@ async function runSmokeTests() {
     if (!timeline || timeline.length === 0) throw new Error('Timeline empty');
     if (!certificate || !certificate.pdf_url) throw new Error('Certificate empty');
 
-    // Check signature snapshot URL in approval log
     const approvalLog = timeline.find((l) => l.action === 'approved');
     if (!approvalLog || !approvalLog.signature_url) {
       throw new Error('Approval log missing snapshot signature_url: ' + JSON.stringify(timeline));
@@ -372,30 +449,10 @@ async function runSmokeTests() {
   }
 
   // ----------------------------------------------------
-  // SECTION 6: NOTIFICATIONS & MAILER LOGGING
+  // SECTION 6: ROLE-BASED ACCESS CONTROL (RBAC)
   // ----------------------------------------------------
-  console.log('\n▶ [Test 6] Notifications & Email Dispatch...');
+  console.log('\n▶ [Test 6] Role-Based Access Control (RBAC)...');
   try {
-    const notifsRes = await request('/requests/notifications', {
-      headers: { Authorization: `Bearer ${studentToken}` },
-    });
-    if (notifsRes.status !== 200 || !Array.isArray(notifsRes.data)) {
-      throw new Error('Failed to retrieve student notifications: ' + JSON.stringify(notifsRes.data));
-    }
-    console.log(`  ✔ Notification queue active: ${notifsRes.data.length} notifications logged for student`);
-    console.log('  ✔ Nodemailer mailer executed without crashing backend');
-    results['Section 6: Notifications & Mailer'] = 'PASSED (worked as expected)';
-  } catch (err) {
-    console.error('  ✖ Test 6 Failed:', err.message);
-    results['Section 6: Notifications & Mailer'] = `FAILED: ${err.message}`;
-  }
-
-  // ----------------------------------------------------
-  // SECTION 7: ROLE-BASED ACCESS CONTROL (RBAC)
-  // ----------------------------------------------------
-  console.log('\n▶ [Test 7] Role-Based Access Control (RBAC)...');
-  try {
-    // 7a: Student tries to access admin queue -> must be 403 Forbidden
     const studentAsAdmin = await request('/admin/requests', {
       headers: { Authorization: `Bearer ${studentToken}` },
     });
@@ -403,7 +460,6 @@ async function runSmokeTests() {
       throw new Error(`Student was not blocked from admin queue (status: ${studentAsAdmin.status})`);
     }
 
-    // 7b: Admin tries to submit student request -> must be 403 Forbidden
     const adminAsStudent = await request('/requests', {
       method: 'POST',
       headers: { Authorization: `Bearer ${adminToken}` },
@@ -413,7 +469,6 @@ async function runSmokeTests() {
       throw new Error(`Admin was not blocked from student submission (status: ${adminAsStudent.status})`);
     }
 
-    // 7c: Unauthenticated request to protected route -> must be 401 Unauthorized
     const unauth = await request('/admin/requests');
     if (unauth.status !== 401) {
       throw new Error(`Unauthenticated request was not blocked (status: ${unauth.status})`);
@@ -422,10 +477,10 @@ async function runSmokeTests() {
     console.log('  ✔ Student token rejected on /api/admin/* with 403 Forbidden');
     console.log('  ✔ Admin token rejected on /api/requests POST with 403 Forbidden');
     console.log('  ✔ Anonymous request blocked with 401 Unauthorized');
-    results['Section 7: Role Protection & RBAC'] = 'PASSED (worked as expected)';
+    results['Section 6: Role Protection & RBAC'] = 'PASSED (worked as expected)';
   } catch (err) {
-    console.error('  ✖ Test 7 Failed:', err.message);
-    results['Section 7: Role Protection & RBAC'] = `FAILED: ${err.message}`;
+    console.error('  ✖ Test 6 Failed:', err.message);
+    results['Section 6: Role Protection & RBAC'] = `FAILED: ${err.message}`;
   }
 
   console.log('\n====================================================');

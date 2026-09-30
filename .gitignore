@@ -3,6 +3,7 @@ node_modules/
 backend/uploads/documents/*
 backend/uploads/signatures/*
 backend/uploads/certificates/*
+backend/uploads/id_cards/*
 !backend/uploads/**/.gitkeep
 frontend/build/
 .DS_Store

@@ -36,4 +36,15 @@ const uploadSignature = multer({
   },
 });
 
-module.exports = { uploadDocument, uploadSignature };
+// Student college ID card uploaded during registration (PDF/JPG/PNG, max 5MB)
+const uploadIdCard = multer({
+  storage: makeStorage('id_cards'),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const allowed = /pdf|jpg|jpeg|png/;
+    const ok = allowed.test(path.extname(file.originalname).toLowerCase());
+    cb(ok ? null : new Error('Only PDF/JPG/PNG files are allowed for ID card.'), ok);
+  },
+});
+
+module.exports = { uploadDocument, uploadSignature, uploadIdCard };

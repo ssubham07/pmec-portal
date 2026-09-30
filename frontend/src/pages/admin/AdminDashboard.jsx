@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import api from '../../api/axios';
+import api, { FILE_BASE_URL } from '../../api/axios';
 import RequestCard from '../../components/RequestCard';
 import { useAuth } from '../../context/AuthContext';
 
@@ -63,6 +63,21 @@ export default function AdminDashboard() {
       setPendingStudents((prev) => prev.filter((s) => s.id !== studentId));
     } catch (err) {
       setVerifyMessage(err.response?.data?.error || 'Failed to verify student.');
+    } finally {
+      setVerifyingId(null);
+    }
+  }
+
+  async function handleRejectStudent(studentId) {
+    if (!window.confirm('Are you sure you want to reject this student registration?')) return;
+    setVerifyingId(studentId);
+    setVerifyMessage('');
+    try {
+      const res = await api.post(`/admin/students/${studentId}/reject`);
+      setVerifyMessage(res.data.message || 'Student registration rejected.');
+      setPendingStudents((prev) => prev.filter((s) => s.id !== studentId));
+    } catch (err) {
+      setVerifyMessage(err.response?.data?.error || 'Failed to reject student.');
     } finally {
       setVerifyingId(null);
     }
@@ -222,6 +237,7 @@ export default function AdminDashboard() {
                     <th className="p-3">Semester</th>
                     <th className="p-3">Registered Email</th>
                     <th className="p-3">Phone</th>
+                    <th className="p-3">ID Card</th>
                     <th className="p-3 text-right">Action</th>
                   </tr>
                 </thead>
@@ -238,14 +254,37 @@ export default function AdminDashboard() {
                         </span>
                       </td>
                       <td className="p-3">{s.phone || '—'}</td>
+                      <td className="p-3">
+                        {s.id_card_url ? (
+                          <a
+                            href={`${FILE_BASE_URL}${s.id_card_url}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold underline"
+                          >
+                            <span>🪪</span> View ID Card ↗
+                          </a>
+                        ) : (
+                          <span className="text-slate-400 italic">None</span>
+                        )}
+                      </td>
                       <td className="p-3 text-right">
-                        <button
-                          onClick={() => handleVerifyStudent(s.id)}
-                          disabled={verifyingId === s.id}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow-sm transition disabled:opacity-50"
-                        >
-                          {verifyingId === s.id ? 'Verifying...' : 'Verify Student'}
-                        </button>
+                        <div className="inline-flex items-center gap-2">
+                          <button
+                            onClick={() => handleVerifyStudent(s.id)}
+                            disabled={verifyingId === s.id}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow-sm transition disabled:opacity-50"
+                          >
+                            {verifyingId === s.id ? 'Verifying...' : 'Verify'}
+                          </button>
+                          <button
+                            onClick={() => handleRejectStudent(s.id)}
+                            disabled={verifyingId === s.id}
+                            className="bg-rose-600 hover:bg-rose-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow-sm transition disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
