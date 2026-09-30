@@ -26,6 +26,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, activeTab]);
 
   function loadData() {

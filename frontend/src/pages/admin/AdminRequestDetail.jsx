@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import api, { FILE_BASE_URL } from '../../api/axios';
 import StatusBadge from '../../components/StatusBadge';
 import Timeline from '../../components/Timeline';
@@ -13,7 +13,6 @@ export default function AdminRequestDetail() {
   const [acting, setActing] = useState(false);
   const [error, setError] = useState('');
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   function load() {
     setLoading(true);
