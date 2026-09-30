@@ -11,12 +11,8 @@ export default function Login() {
   const [role, setRole] = useState('student');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [captchaInput, setCaptchaInput] = useState('');
-  const [captchaId, setCaptchaId] = useState('');
-  const [captchaSvg, setCaptchaSvg] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loadingCaptcha, setLoadingCaptcha] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -26,29 +22,14 @@ export default function Login() {
     } else if (r === 'student') {
       setRole('student');
     }
-    fetchCaptcha();
   }, [location.search]);
-
-  async function fetchCaptcha() {
-    setLoadingCaptcha(true);
-    try {
-      const res = await api.get('/auth/captcha');
-      setCaptchaId(res.data.captchaId);
-      setCaptchaSvg(res.data.svgUrl);
-      setCaptchaInput('');
-    } catch (e) {
-      console.warn('Captcha load failed:', e);
-    } finally {
-      setLoadingCaptcha(false);
-    }
-  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
 
-    if (!captchaInput.trim()) {
-      setError('Please enter the captcha characters shown.');
+    if (!email.trim() || !password) {
+      setError('Please enter both email and password.');
       return;
     }
 
@@ -56,18 +37,14 @@ export default function Login() {
     try {
       const endpoint = role === 'student' ? '/auth/student/login' : '/auth/admin/login';
       const { data } = await api.post(endpoint, {
-        email,
+        email: email.trim(),
         password,
-        captchaInput,
-        captchaId,
       });
 
       login(data.token, data.user);
       navigate(role === 'student' ? '/dashboard' : '/admin');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed. Please verify credentials.');
-      // Refresh captcha on failure
-      fetchCaptcha();
+      setError(err.response?.data?.error || 'Login failed. Please verify your credentials.');
     } finally {
       setLoading(false);
     }
@@ -141,7 +118,7 @@ export default function Login() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3.5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               {role === 'student' ? 'College Email Address' : 'Officer Email'}
@@ -168,43 +145,10 @@ export default function Login() {
             />
           </div>
 
-          {/* Captcha Authentication Section */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
-            <label className="block text-xs font-semibold text-slate-700">
-              Security Captcha *
-            </label>
-            <div className="flex items-center gap-3">
-              <div className="h-11 bg-white border border-slate-300 rounded-lg overflow-hidden flex items-center justify-center p-1">
-                {captchaSvg ? (
-                  <img src={captchaSvg} alt="Captcha code" className="h-full object-contain" />
-                ) : (
-                  <span className="text-xs text-slate-400 px-4">Loading...</span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={fetchCaptcha}
-                disabled={loadingCaptcha}
-                title="Refresh Captcha"
-                className="p-2 text-xs font-medium text-[#0f2a52] hover:bg-slate-200 rounded-lg border border-slate-200 transition"
-              >
-                ↻ Refresh
-              </button>
-            </div>
-            <input
-              type="text"
-              placeholder="Enter characters shown above"
-              required
-              value={captchaInput}
-              onChange={(e) => setCaptchaInput(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm uppercase tracking-wider font-mono focus:outline-none focus:ring-2 focus:ring-[#0f2a52]"
-            />
-          </div>
-
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#0f2a52] hover:bg-[#1a3a69] text-white rounded-lg py-2.5 text-sm font-bold shadow transition disabled:opacity-50"
+            className="w-full bg-[#0f2a52] hover:bg-[#1a3a69] text-white rounded-lg py-2.5 text-sm font-bold shadow transition disabled:opacity-50 mt-1"
           >
             {loading ? 'Authenticating...' : `Sign In as ${role === 'student' ? 'Student' : 'Institute Officer'}`}
           </button>

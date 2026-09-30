@@ -109,81 +109,66 @@ async function runSmokeTests() {
   }
 
   // ----------------------------------------------------
-  // SECTION 2: DIRECT 1-STEP LOGIN FOR STUDENT & ADMIN (NO OTP)
+  // SECTION 2: DIRECT 1-STEP LOGIN FOR STUDENT & ADMIN (NO OTP, NO CAPTCHA)
   // ----------------------------------------------------
-  console.log('\n▶ [Test 2] Direct 1-Step Login for Student & Admin (No OTP)...');
+  console.log('\n▶ [Test 2] Direct 1-Step Login for Student & Admin (No OTP, No Captcha)...');
   let studentToken = '';
   let adminToken = '';
   let dswToken = '';
   try {
-    // 2a: Test Captcha wrong input
-    const capWrong = await getCaptcha();
-    const loginBadCap = await request('/auth/admin/login', {
+    // 2a: Missing email/password rejected
+    const badLogin = await request('/auth/admin/login', {
       method: 'POST',
-      body: {
-        email: 'ashok.examcell@pmec.edu',
-        password: 'Password@123',
-        captchaId: capWrong.captchaId,
-        captchaInput: 'WRONG99',
-      },
+      body: { email: '', password: '' },
     });
-    if (loginBadCap.status !== 400 || !loginBadCap.data.error.includes('captcha')) {
-      throw new Error('Invalid captcha was not rejected: ' + JSON.stringify(loginBadCap.data));
+    if (badLogin.status !== 400) {
+      throw new Error('Empty credentials were not rejected: ' + JSON.stringify(badLogin.data));
     }
-    console.log('  ✔ Invalid captcha rejected with 400');
+    console.log('  ✔ Empty credentials rejected with 400 Bad Request');
 
-    // 2b: Student Direct 1-Step Login with College Email format
-    const capStudent = await getCaptcha();
+    // 2b: Student Direct 1-Step Login with College Email format (No Captcha)
     const studentLogin = await request('/auth/student/login', {
       method: 'POST',
       body: {
         email: '2301109307_cse@pmec.ac.in',
         password: 'Password@123',
-        captchaId: capStudent.captchaId,
-        captchaInput: capStudent.solution,
       },
     });
     if (studentLogin.status !== 200 || !studentLogin.data.token || studentLogin.data.otpRequired) {
       throw new Error(`Direct student login failed: ${JSON.stringify(studentLogin.data)}`);
     }
     studentToken = studentLogin.data.token;
-    console.log(`  ✔ Student logged in directly in 1 step without OTP (Reg No: ${studentLogin.data.user.roll_no}, token issued)`);
+    console.log(`  ✔ Student logged in directly without captcha/OTP (Reg No: ${studentLogin.data.user.roll_no}, token issued)`);
 
-    // 2c: Admin Exam Cell Direct 1-Step Login
-    const capAdmin = await getCaptcha();
+    // 2c: Admin Exam Cell Direct 1-Step Login (No Captcha)
     const adminLogin = await request('/auth/admin/login', {
       method: 'POST',
       body: {
         email: 'ashok.examcell@pmec.edu',
         password: 'Password@123',
-        captchaId: capAdmin.captchaId,
-        captchaInput: capAdmin.solution,
       },
     });
     if (adminLogin.status !== 200 || !adminLogin.data.token || adminLogin.data.otpRequired) {
       throw new Error(`Direct admin login failed: ${JSON.stringify(adminLogin.data)}`);
     }
     adminToken = adminLogin.data.token;
-    console.log('  ✔ Admin logged in directly in 1 step without OTP (Exam Cell token issued)');
+    console.log('  ✔ Admin logged in directly without captcha/OTP (Exam Cell token issued)');
 
-    // 2d: DSW Officer Direct 1-Step Login
-    const capDsw = await getCaptcha();
+    // 2d: DSW Officer Direct 1-Step Login (No Captcha)
     const dswLogin = await request('/auth/admin/login', {
       method: 'POST',
       body: {
         email: 'dsw@pmec.ac.in',
         password: 'Password@123',
-        captchaId: capDsw.captchaId,
-        captchaInput: capDsw.solution,
       },
     });
     if (dswLogin.status !== 200 || !dswLogin.data.token || dswLogin.data.otpRequired) {
       throw new Error(`Direct DSW login failed: ${JSON.stringify(dswLogin.data)}`);
     }
     dswToken = dswLogin.data.token;
-    console.log('  ✔ DSW Officer logged in directly in 1 step without OTP (DSW token issued)');
+    console.log('  ✔ DSW Officer logged in directly without captcha/OTP (DSW token issued)');
 
-    results['Feature 2: Direct 1-Step Login'] = 'PASSED (worked as expected)';
+    results['Feature 2: Direct 1-Step Login (No Captcha)'] = 'PASSED (worked as expected)';
   } catch (err) {
     console.error('  ✖ Test 2 Failed:', err.message);
     results['Feature 2: Direct 1-Step Login'] = `FAILED: ${err.message}`;

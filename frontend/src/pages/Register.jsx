@@ -174,12 +174,15 @@ export default function Register() {
         {otpStep ? (
           <div>
             <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-4 mb-5 text-xs">
-              <div className="font-bold mb-1 flex items-center gap-1.5 text-blue-950">
-                <span>✉️</span> Registration Verification Code
+              <div className="font-bold mb-1.5 flex items-center gap-1.5 text-blue-950 text-sm">
+                <span>📱✉️</span> Two-Channel OTP Verification (Email & Mobile SMS)
               </div>
-              <p>{otpMessage}</p>
-              <p className="mt-1.5 text-slate-700 font-mono font-semibold">Account: {form.email}</p>
-              <p className="text-slate-600 font-mono text-[11px]">College Reg No: {form.roll_no}</p>
+              <p className="leading-relaxed">{otpMessage}</p>
+              <div className="mt-2 space-y-1 text-slate-700 font-mono text-[11px] bg-white p-2.5 rounded-lg border border-blue-200">
+                <p><strong>Email Address:</strong> {form.email}</p>
+                <p><strong>Mobile (SMS):</strong> {form.phone}</p>
+                <p><strong>College Reg No:</strong> {form.roll_no}</p>
+              </div>
             </div>
 
             {otpError && (
@@ -320,13 +323,17 @@ export default function Register() {
               </div>
 
               <div className="col-span-2">
-                <label className="block font-semibold text-slate-700 mb-1">Phone Number</label>
+                <label className="block font-semibold text-slate-700 mb-1">Mobile Number (for SMS OTP) *</label>
                 <input
                   placeholder="e.g. 9800000005"
+                  required
                   value={form.phone}
                   onChange={(e) => update('phone', e.target.value)}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2a52]"
                 />
+                <span className="text-[11px] text-slate-400 mt-0.5 block">
+                  A 6-digit registration OTP code will be sent to both your email and mobile number.
+                </span>
               </div>
 
               <div className="col-span-2">

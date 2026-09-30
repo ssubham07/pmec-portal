@@ -4,6 +4,7 @@ const Student = require('../models/Student');
 const Admin = require('../models/Admin');
 const { createCaptcha, verifyCaptcha } = require('../utils/captcha');
 const { sendMail } = require('../utils/mailer');
+const { sendSMS } = require('../utils/sms');
 
 function signToken(user) {
   return jwt.sign(
@@ -61,20 +62,27 @@ async function registerStudent(req, res) {
 
     await Student.setOtp(student.id, otpHash, expiresAt);
 
-    // Send OTP via email and log for development/testing
+    // Send OTP via email and mobile SMS
     const textMsg = `Welcome to PMEC Student Portal!\n\nYour registration verification code is: ${otp}. It will expire in ${expiryMinutes} minutes.\n\nPlease enter this code to activate your account.`;
-    console.log(`[AUTH] Student Registration OTP generated for ${student.email}: ${otp}`);
+    console.log(`[AUTH] Student Registration OTP generated for ${student.email} & ${student.phone}: ${otp}`);
     sendMail({
       to: student.email,
       subject: 'PMEC Portal - Student Registration Verification Code',
       text: textMsg,
     });
+    if (student.phone) {
+      sendSMS({
+        to: student.phone,
+        message: `PMEC Portal: Your account registration verification code is ${otp}. Valid for ${expiryMinutes} mins.`,
+      });
+    }
 
     res.status(201).json({
       otpRequired: true,
       studentId: student.id,
       email: student.email,
-      message: `A 6-digit verification code has been sent to ${student.email}.`,
+      phone: student.phone,
+      message: `A 6-digit verification code has been dispatched to your email (${student.email}) and mobile number (${student.phone || 'provided'}).`,
     });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'College Registration Number or email already registered.' });
@@ -85,11 +93,9 @@ async function registerStudent(req, res) {
 
 async function loginStudent(req, res) {
   try {
-    const { email, password, captchaInput, captchaId } = req.body;
-
-    // Verify Captcha
-    if (!captchaInput || !captchaId || !verifyCaptcha(captchaId, captchaInput)) {
-      return res.status(400).json({ error: 'Invalid or expired captcha. Please enter the characters shown.' });
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
     }
 
     const student = await Student.findByEmail(email);
@@ -199,14 +205,20 @@ async function resendStudentOtp(req, res) {
 
     await Student.setOtp(student.id, otpHash, expiresAt);
 
-    console.log(`[AUTH] Resent Student Registration OTP for ${student.email}: ${otp}`);
+    console.log(`[AUTH] Resent Student Registration OTP for ${student.email} & ${student.phone}: ${otp}`);
     sendMail({
       to: student.email,
       subject: 'PMEC Portal - Resent Registration Verification Code',
       text: `Your new PMEC Student Portal registration verification code is: ${otp}. It will expire in ${expiryMinutes} minutes.`,
     });
+    if (student.phone) {
+      sendSMS({
+        to: student.phone,
+        message: `PMEC Portal: Your new registration verification code is ${otp}. Valid for ${expiryMinutes} mins.`,
+      });
+    }
 
-    res.json({ message: 'A fresh verification code has been sent to your email.' });
+    res.json({ message: 'A fresh verification code has been dispatched to your email and mobile number.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to resend OTP code.' });
@@ -216,11 +228,9 @@ async function resendStudentOtp(req, res) {
 // -------- Admin Login (Direct Login Without OTP) --------
 async function loginAdmin(req, res) {
   try {
-    const { email, password, captchaInput, captchaId } = req.body;
-
-    // Verify Captcha
-    if (!captchaInput || !captchaId || !verifyCaptcha(captchaId, captchaInput)) {
-      return res.status(400).json({ error: 'Invalid or expired captcha. Please enter the characters shown.' });
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
     }
 
     const admin = await Admin.findByEmail(email);
