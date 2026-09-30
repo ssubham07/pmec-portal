@@ -1,0 +1,9 @@
+node_modules/
+.env
+backend/uploads/documents/*
+backend/uploads/signatures/*
+backend/uploads/certificates/*
+!backend/uploads/**/.gitkeep
+frontend/build/
+.DS_Store
+npm-debug.log*
