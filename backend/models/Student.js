@@ -50,6 +50,20 @@ const Student = {
     );
     return rows[0];
   },
+  async findByEmailWithOtp(email) {
+    const { rows } = await db.query(
+      'SELECT id, roll_no, name, department, semester, email, phone, status, id_card_url, otp_code_hash, otp_expires_at, otp_attempts FROM students WHERE LOWER(email) = LOWER($1)',
+      [email]
+    );
+    return rows[0];
+  },
+  async findByRollNoWithOtp(roll_no) {
+    const { rows } = await db.query(
+      'SELECT id, roll_no, name, department, semester, email, phone, status, id_card_url, otp_code_hash, otp_expires_at, otp_attempts FROM students WHERE roll_no = $1',
+      [roll_no]
+    );
+    return rows[0];
+  },
   async setOtp(id, otpCodeHash, expiresAt) {
     const { rows } = await db.query(
       `UPDATE students

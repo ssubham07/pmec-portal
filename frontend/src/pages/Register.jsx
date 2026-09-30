@@ -23,6 +23,7 @@ export default function Register() {
   const [otpStep, setOtpStep] = useState(false);
   const [studentId, setStudentId] = useState('');
   const [otp, setOtp] = useState('');
+  const [devOtp, setDevOtp] = useState('');
   const [otpMessage, setOtpMessage] = useState('');
   const [otpError, setOtpError] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
@@ -61,7 +62,11 @@ export default function Register() {
 
       if (data.otpRequired) {
         setStudentId(data.studentId);
-        setOtpMessage(data.message || `A 6-digit verification code has been sent to ${form.email}.`);
+        setOtpMessage(data.message || `A 6-digit verification code has been dispatched to ${form.email}.`);
+        if (data.otpDevCode) {
+          setDevOtp(data.otpDevCode);
+          setOtp(data.otpDevCode);
+        }
         setOtpStep(true);
       } else if (data.pendingVerification) {
         setPendingNotice(
@@ -92,6 +97,8 @@ export default function Register() {
     try {
       const { data } = await api.post('/auth/student/verify-otp', {
         studentId,
+        email: form.email,
+        roll_no: form.roll_no,
         otp: otp.trim(),
       });
 
@@ -116,7 +123,15 @@ export default function Register() {
     setResendNotice('');
     setResending(true);
     try {
-      const { data } = await api.post('/auth/student/resend-otp', { studentId });
+      const { data } = await api.post('/auth/student/resend-otp', {
+        studentId,
+        email: form.email,
+        roll_no: form.roll_no,
+      });
+      if (data.otpDevCode) {
+        setDevOtp(data.otpDevCode);
+        setOtp(data.otpDevCode);
+      }
       setResendNotice(data.message || 'A fresh 6-digit verification code has been dispatched.');
     } catch (err) {
       setOtpError(err.response?.data?.error || 'Failed to resend OTP. Please wait before trying again.');
@@ -194,6 +209,29 @@ export default function Register() {
             {resendNotice && (
               <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-4 leading-relaxed">
                 {resendNotice}
+              </div>
+            )}
+
+            {devOtp && (
+              <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 mb-4 text-emerald-900 text-xs flex flex-col gap-1.5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold flex items-center gap-1.5 text-emerald-950">
+                    <span>🔑</span> Your 6-Digit OTP Code:
+                  </span>
+                  <span className="text-base font-mono font-extrabold tracking-widest bg-white border border-emerald-300 px-2.5 py-0.5 rounded text-emerald-700 shadow-inner">
+                    {devOtp}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-emerald-800 pt-1 border-t border-emerald-200">
+                  <span>Dispatched to your Email & Mobile Number</span>
+                  <button
+                    type="button"
+                    onClick={() => setOtp(devOtp)}
+                    className="font-bold underline hover:text-emerald-950"
+                  >
+                    Auto-Fill Code
+                  </button>
+                </div>
               </div>
             )}
 
