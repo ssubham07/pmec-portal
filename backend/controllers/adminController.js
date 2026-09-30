@@ -10,7 +10,7 @@ const { sendMail } = require('../utils/mailer');
 const { generateCertificateNumber } = require('../utils/certNumber');
 const { generateCertificatePdf, generateApprovalMemoPdf } = require('../utils/pdfGenerator');
 
-const CERTIFICATE_TYPES = ['bonafide_certificate', 'scholarship_verification'];
+const CERTIFICATE_TYPES = ['bonafide_certificate', 'scholarship_verification', 'semester_registration'];
 
 const ACTION_TO_STATUS = {
   approve: 'approved',

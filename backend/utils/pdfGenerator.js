@@ -78,17 +78,50 @@ async function generateCertificatePdf({
   const stream = fs.createWriteStream(filePath);
   doc.pipe(stream);
 
-  const title =
-    request.type === 'bonafide_certificate' ? 'BONAFIDE CERTIFICATE' : 'SCHOLARSHIP VERIFICATION CERTIFICATE';
+  let title = 'VERIFICATION CERTIFICATE';
+  if (request.type === 'semester_registration') {
+    title = 'SEMESTER REGISTRATION VERIFICATION CERTIFICATE';
+  } else if (request.type === 'bonafide_certificate') {
+    title = 'BONAFIDE CERTIFICATE';
+  } else if (request.type === 'scholarship_verification') {
+    title = 'SCHOLARSHIP VERIFICATION CERTIFICATE';
+  }
   drawLetterhead(doc, title);
 
   doc.fontSize(10).fillColor('#6b7280').text(`Certificate No: ${certificateNo}`, { align: 'right' });
   doc.text(`Date of Issue: ${new Date().toLocaleDateString('en-IN')}`, { align: 'right' });
   doc.moveDown(1.5);
 
-  doc.fontSize(12).fillColor('#111827');
+  doc.fontSize(11).fillColor('#111827');
 
-  if (request.type === 'bonafide_certificate') {
+  if (request.type === 'semester_registration') {
+    const sem = request.details?.semester_to_register || request.student_semester;
+    const feeReceipt = request.details?.fee_receipt_no || 'N/A';
+    const feeAmount = request.details?.fee_amount ? `INR ${request.details.fee_amount}` : 'Verified';
+    const payDate = request.details?.payment_date || new Date().toLocaleDateString('en-IN');
+
+    doc.text(
+      `This is to certify that ${request.student_name} (Roll No: ${request.roll_no}), ` +
+        `a regular student of the ${request.student_department} department, has successfully completed ` +
+        `the institutional semester registration process for Semester ${sem} at Parala Maharaja Engineering College.`,
+      { align: 'justify', lineGap: 4 }
+    );
+    doc.moveDown(0.8);
+    doc.fontSize(10).fillColor('#1e293b').text(
+      `Fees Payment Verification & Office Audit:\n` +
+        `• Fee Receipt / Transaction No: ${feeReceipt}\n` +
+        `• Amount Paid: ${feeAmount}\n` +
+        `• Payment / Verification Date: ${payDate}\n` +
+        `• Institutional Verification: COMPLETED & APPROVED`,
+      { align: 'justify', lineGap: 3 }
+    );
+    doc.moveDown(0.8);
+    doc.fontSize(11).fillColor('#111827').text(
+      `This electronic certificate serves as official verification of semester registration and fee clearance for all academic and administrative purposes.`,
+      { align: 'justify', lineGap: 4 }
+    );
+  } else if (request.type === 'bonafide_certificate') {
+    const bonafideRef = request.details?.bonafide_ref_no || certificateNo;
     doc.text(
       `This is to certify that ${request.student_name} (Roll No: ${request.roll_no}), ` +
         `a bonafide student of the ${request.student_department} department, currently studying in ` +
@@ -96,18 +129,41 @@ async function generateCertificatePdf({
         `student of this institution during the academic session ${new Date().getFullYear()}.`,
       { align: 'justify', lineGap: 4 }
     );
-    if (request.details && request.details.purpose) {
-      doc.moveDown(0.8).text(`This certificate is issued for the purpose of: ${request.details.purpose}.`, {
-        align: 'justify',
-      });
-    }
+    doc.moveDown(0.8);
+    doc.fontSize(10).fillColor('#1e293b').text(
+      `Bonafide Verification Details:\n` +
+        `• Bonafide / Reference No: ${bonafideRef}\n` +
+        `• Purpose of Issue: ${request.details?.purpose || 'General Academic Verification'}\n` +
+        `• Endorsed By: Office of Dean Student Welfare (DSW)`,
+      { align: 'justify', lineGap: 3 }
+    );
+    doc.moveDown(0.8);
+    doc.fontSize(11).fillColor('#111827').text(
+      `The institution confirms that student records and bonafide credentials have been verified by the Dean Student Welfare (DSW) section.`,
+      { align: 'justify', lineGap: 4 }
+    );
   } else {
+    const scheme = (request.details && request.details.scheme_name) || 'N/A';
+    const appId = request.details?.application_id || 'N/A';
+    const acadYear = request.details?.academic_year || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+
     doc.text(
       `This is to certify that ${request.student_name} (Roll No: ${request.roll_no}), a bonafide student ` +
         `of the ${request.student_department} department, Semester ${request.student_semester}, has been ` +
-        `verified as eligible for the scholarship scheme "${
-          (request.details && request.details.scheme_name) || 'N/A'
-        }" as per institutional records.`,
+        `verified as eligible for the scholarship scheme "${scheme}" as per institutional records.`,
+      { align: 'justify', lineGap: 4 }
+    );
+    doc.moveDown(0.8);
+    doc.fontSize(10).fillColor('#1e293b').text(
+      `Scholarship Endorsement Details:\n` +
+        `• Scholarship Application / Reg. ID: ${appId}\n` +
+        `• Academic Year: ${acadYear}\n` +
+        `• Endorsed By: Office of Dean Student Welfare (DSW) / Scholarship Section`,
+      { align: 'justify', lineGap: 3 }
+    );
+    doc.moveDown(0.8);
+    doc.fontSize(11).fillColor('#111827').text(
+      `This e-certificate is issued upon document verification and approval by the designated institutional authority.`,
       { align: 'justify', lineGap: 4 }
     );
   }

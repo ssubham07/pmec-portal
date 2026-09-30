@@ -12,6 +12,7 @@ async function seed() {
   const admins = [
     { name: 'Dr. Ashok Mishra', role: 'exam_cell', department: 'Examination Cell', email: 'ashok.examcell@pmec.edu' },
     { name: 'Ms. Sunita Rao', role: 'hod', department: 'Computer Science & Engineering', email: 'sunita.hod.cse@pmec.edu' },
+    { name: 'Prof. Ramesh Chandra Jena', role: 'dsw', department: 'Dean Student Welfare (DSW)', email: 'dsw@pmec.ac.in' },
   ];
 
   for (const a of admins) {

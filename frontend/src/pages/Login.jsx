@@ -132,6 +132,10 @@ export default function Login() {
       setRole('student');
       setEmail('ravi.sahoo@student.pmec.edu');
       setPassword('Password@123');
+    } else if (type === 'dsw') {
+      setRole('admin');
+      setEmail('dsw@pmec.ac.in');
+      setPassword('Password@123');
     } else {
       setRole('admin');
       setEmail('ashok.examcell@pmec.edu');
@@ -339,20 +343,27 @@ export default function Login() {
           <p className="text-[11px] font-semibold text-slate-400 uppercase text-center mb-2">
             ⚡ Quick Demo Logins (Auto-Fills Credentials)
           </p>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <button
               type="button"
               onClick={() => fillDemo('student')}
-              className="flex-1 py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-300 transition"
+              className="flex-1 py-1.5 px-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-300 transition text-center"
             >
-              🎓 Student Demo
+              🎓 Student
             </button>
             <button
               type="button"
               onClick={() => fillDemo('admin')}
-              className="flex-1 py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-300 transition"
+              className="flex-1 py-1.5 px-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-300 transition text-center"
             >
-              🏛️ Institute Demo
+              🏛️ Exam Cell
+            </button>
+            <button
+              type="button"
+              onClick={() => fillDemo('dsw')}
+              className="flex-1 py-1.5 px-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-300 transition text-center"
+            >
+              🎖️ DSW Officer
             </button>
           </div>
         </div>

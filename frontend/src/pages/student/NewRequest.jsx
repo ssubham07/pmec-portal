@@ -8,8 +8,16 @@ import api from '../../api/axios';
 const REQUEST_TYPES = [
   {
     value: 'semester_registration',
-    label: 'Semester Registration',
-    fields: [{ name: 'semester_to_register', label: 'Semester to Register', type: 'number', required: true }],
+    label: 'Semester Registration (with Fee Verification)',
+    fields: [
+      { name: 'semester_to_register', label: 'Semester to Register', type: 'number', required: true },
+      { name: 'fee_receipt_no', label: 'Fee Receipt / Challan / Transaction ID', type: 'text', required: true },
+      { name: 'fee_amount', label: 'Fee Amount Paid (INR)', type: 'number', required: true },
+      { name: 'payment_date', label: 'Payment Date', type: 'date', required: true },
+    ],
+    requiresDocument: true,
+    docLabel: 'Fee Payment Receipt / SB Collect Challan (PDF / Image)',
+    documentRequired: true,
   },
   {
     value: 'internal_mark_correction',
@@ -49,15 +57,25 @@ const REQUEST_TYPES = [
   },
   {
     value: 'bonafide_certificate',
-    label: 'Bonafide Certificate',
-    fields: [{ name: 'purpose', label: 'Purpose (e.g. Bank loan, Passport)', type: 'text', required: true }],
+    label: 'Bonafide Certificate (DSW Verification)',
+    fields: [
+      { name: 'purpose', label: 'Purpose of Bonafide (e.g. Bank loan, Passport, Scholarship)', type: 'text', required: true },
+      { name: 'bonafide_ref_no', label: 'Bonafide / Student Reference Number (if any)', type: 'text', required: false },
+    ],
+    requiresDocument: true,
+    docLabel: 'Upload Bonafide Application / Supporting Document (PDF / Image)',
+    documentRequired: true,
   },
   {
     value: 'scholarship_verification',
-    label: 'Scholarship Verification',
-    fields: [{ name: 'scheme_name', label: 'Scholarship Scheme Name', type: 'text', required: true }],
+    label: 'Scholarship Verification (DSW Endorsement)',
+    fields: [
+      { name: 'scheme_name', label: 'Scholarship Scheme Name (e.g. Post-Matric, NSP)', type: 'text', required: true },
+      { name: 'application_id', label: 'Scholarship Application / Registration ID', type: 'text', required: true },
+      { name: 'academic_year', label: 'Academic Year (e.g. 2025-2026)', type: 'text', required: true },
+    ],
     requiresDocument: true,
-    docLabel: 'Supporting document (income certificate, scheme proof, etc.)',
+    docLabel: 'Scholarship Form / Income Certificate / Fee Proof (PDF / Image)',
     documentRequired: true,
   },
 ];
