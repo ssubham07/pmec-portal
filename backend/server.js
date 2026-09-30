@@ -36,4 +36,8 @@ app.use((err, req, res, next) => {
 app.use((req, res) => res.status(404).json({ error: 'Not found.' }));
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`PMEC Portal API listening on port ${PORT}`));
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`PMEC Portal API listening on port ${PORT}`));
+}
+
+module.exports = app;
