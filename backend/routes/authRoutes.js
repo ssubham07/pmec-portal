@@ -3,6 +3,8 @@ const router = express.Router();
 const {
   registerStudent,
   loginStudent,
+  verifyStudentOtp,
+  resendStudentOtp,
   loginAdmin,
   verifyAdminOtp,
   resendAdminOtp,
@@ -15,6 +17,8 @@ const { uploadIdCard } = require('../middleware/upload');
 router.get('/captcha', getCaptcha);
 router.post('/student/register', uploadIdCard.single('id_card'), registerStudent);
 router.post('/student/login', loginStudent);
+router.post('/student/verify-otp', verifyStudentOtp);
+router.post('/student/resend-otp', resendStudentOtp);
 router.post('/admin/login', loginAdmin);
 router.post('/admin/verify-otp', verifyAdminOtp);
 router.post('/admin/resend-otp', resendAdminOtp);

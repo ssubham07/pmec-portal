@@ -102,16 +102,106 @@ async function loginStudent(req, res) {
       });
     }
 
-    const token = signToken({ id: student.id, role: 'student', email: student.email, name: student.name });
-    const { password_hash, ...safe } = student;
-    res.json({ token, user: { ...safe, role: 'student' } });
+    // Generate 6-digit random numeric OTP for Student
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpHash = await bcrypt.hash(otp, 10);
+
+    const expiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES, 10) || 5;
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
+
+    await Student.setOtp(student.id, otpHash, expiresAt);
+
+    // Send OTP via email and log for development/testing
+    const textMsg = `Your PMEC Student Portal login verification code is: ${otp}. It will expire in ${expiryMinutes} minutes.`;
+    console.log(`[AUTH] Student OTP generated for ${student.email}: ${otp}`);
+    sendMail({
+      to: student.email,
+      subject: 'PMEC Portal - Student Login Verification Code',
+      text: textMsg,
+    });
+
+    res.json({
+      otpRequired: true,
+      studentId: student.id,
+      message: `A 6-digit verification code has been sent to ${student.email}.`,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Login failed.' });
   }
 }
 
-// -------- Admin (Feature 2: Two-Step Login with OTP) --------
+async function verifyStudentOtp(req, res) {
+  try {
+    const { studentId, otp } = req.body;
+    if (!studentId || !otp) {
+      return res.status(400).json({ error: 'Student ID and OTP code are required.' });
+    }
+
+    const student = await Student.findByIdWithOtp(studentId);
+    if (!student) return res.status(404).json({ error: 'Student account not found.' });
+
+    // Rate-limiting / lockout after 5 failed attempts
+    if (student.otp_attempts >= 5) {
+      return res.status(429).json({
+        error: 'Too many incorrect attempts. For security reasons, please request a new OTP code.',
+      });
+    }
+
+    // Check expiration
+    if (!student.otp_expires_at || new Date() > new Date(student.otp_expires_at)) {
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
+    }
+
+    // Verify OTP match
+    const valid = await bcrypt.compare(otp.trim(), student.otp_code_hash || '');
+    if (!valid) {
+      await Student.incrementOtpAttempts(student.id);
+      return res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
+    }
+
+    // Clear OTP fields on successful login
+    await Student.clearOtp(student.id);
+
+    const token = signToken({ id: student.id, role: 'student', email: student.email, name: student.name });
+    const { password_hash, otp_code_hash, otp_expires_at, otp_attempts, ...safe } = student;
+    res.json({ token, user: { ...safe, role: 'student' } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'OTP verification failed.' });
+  }
+}
+
+async function resendStudentOtp(req, res) {
+  try {
+    const { studentId } = req.body;
+    if (!studentId) return res.status(400).json({ error: 'Student ID is required.' });
+
+    const student = await Student.findById(studentId);
+    if (!student) return res.status(404).json({ error: 'Student account not found.' });
+
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES, 10) || 5;
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
+
+    await Student.setOtp(student.id, otpHash, expiresAt);
+
+    console.log(`[AUTH] Resent Student OTP for ${student.email}: ${otp}`);
+    sendMail({
+      to: student.email,
+      subject: 'PMEC Portal - Resent Student Login Verification Code',
+      text: `Your new PMEC Student Portal login verification code is: ${otp}. It will expire in ${expiryMinutes} minutes.`,
+    });
+
+    res.json({ message: 'A fresh verification code has been sent to your email.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to resend OTP code.' });
+  }
+}
+
+// -------- Admin Login (Direct Login Without OTP) --------
 async function loginAdmin(req, res) {
   try {
     const { email, password, captchaInput, captchaId } = req.body;
@@ -127,29 +217,16 @@ async function loginAdmin(req, res) {
     const match = await bcrypt.compare(password, admin.password_hash);
     if (!match) return res.status(401).json({ error: 'Invalid email or password.' });
 
-    // Generate 6-digit random numeric OTP
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
-    const otpHash = await bcrypt.hash(otp, 10);
-
-    const expiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES, 10) || 5;
-    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
-
-    await Admin.setOtp(admin.id, otpHash, expiresAt);
-
-    // Send OTP via email and log for development/testing
-    const textMsg = `Your PMEC Institute Admin login verification code is: ${otp}. It will expire in ${expiryMinutes} minutes.`;
-    console.log(`[AUTH] Admin OTP generated for ${admin.email}: ${otp}`);
-    sendMail({
-      to: admin.email,
-      subject: 'PMEC Portal - Admin Login Verification Code',
-      text: textMsg,
+    // Direct Login for Admin/Institute
+    const token = signToken({
+      id: admin.id,
+      role: 'admin',
+      email: admin.email,
+      name: admin.name,
+      office_role: admin.role,
     });
-
-    res.json({
-      otpRequired: true,
-      adminId: admin.id,
-      message: `A 6-digit verification code has been sent to ${admin.email}.`,
-    });
+    const { password_hash, otp_code_hash, otp_expires_at, otp_attempts, ...safe } = admin;
+    res.json({ token, user: { ...safe, role: 'admin', office_role: admin.role } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Login failed.' });
@@ -165,28 +242,6 @@ async function verifyAdminOtp(req, res) {
 
     const admin = await Admin.findByIdWithOtp(adminId);
     if (!admin) return res.status(404).json({ error: 'Admin account not found.' });
-
-    // Rate-limiting / lockout after 5 failed attempts
-    if (admin.otp_attempts >= 5) {
-      return res.status(429).json({
-        error: 'Too many incorrect attempts. For security reasons, please request a new OTP code.',
-      });
-    }
-
-    // Check expiration
-    if (!admin.otp_expires_at || new Date() > new Date(admin.otp_expires_at)) {
-      return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
-    }
-
-    // Verify OTP match
-    const valid = await bcrypt.compare(otp.trim(), admin.otp_code_hash || '');
-    if (!valid) {
-      await Admin.incrementOtpAttempts(admin.id);
-      return res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
-    }
-
-    // Clear OTP fields on successful login
-    await Admin.clearOtp(admin.id);
 
     const token = signToken({
       id: admin.id,
@@ -204,32 +259,7 @@ async function verifyAdminOtp(req, res) {
 }
 
 async function resendAdminOtp(req, res) {
-  try {
-    const { adminId } = req.body;
-    if (!adminId) return res.status(400).json({ error: 'Admin ID is required.' });
-
-    const admin = await Admin.findById(adminId);
-    if (!admin) return res.status(404).json({ error: 'Admin account not found.' });
-
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
-    const otpHash = await bcrypt.hash(otp, 10);
-    const expiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES, 10) || 5;
-    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
-
-    await Admin.setOtp(admin.id, otpHash, expiresAt);
-
-    console.log(`[AUTH] Resent Admin OTP for ${admin.email}: ${otp}`);
-    sendMail({
-      to: admin.email,
-      subject: 'PMEC Portal - Resent Login Verification Code',
-      text: `Your new PMEC Institute Admin login verification code is: ${otp}. It will expire in ${expiryMinutes} minutes.`,
-    });
-
-    res.json({ message: 'A fresh verification code has been sent to your email.' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to resend OTP code.' });
-  }
+  res.json({ message: 'Admin login does not require OTP.' });
 }
 
 async function me(req, res) {
@@ -244,6 +274,8 @@ async function me(req, res) {
 module.exports = {
   registerStudent,
   loginStudent,
+  verifyStudentOtp,
+  resendStudentOtp,
   loginAdmin,
   verifyAdminOtp,
   resendAdminOtp,

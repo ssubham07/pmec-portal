@@ -18,9 +18,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [loadingCaptcha, setLoadingCaptcha] = useState(false);
 
-  // Admin 2-step OTP verification state
+  // Student 2-step OTP verification state
   const [otpStep, setOtpStep] = useState(false);
-  const [adminId, setAdminId] = useState('');
+  const [userId, setUserId] = useState('');
   const [otp, setOtp] = useState('');
   const [otpMessage, setOtpMessage] = useState('');
   const [otpError, setOtpError] = useState('');
@@ -72,10 +72,11 @@ export default function Login() {
         captchaId,
       });
 
-      if (role === 'admin' && data.otpRequired) {
+      // OTP is required for Student Login
+      if (role === 'student' && data.otpRequired) {
         setOtpStep(true);
-        setAdminId(data.adminId);
-        setOtpMessage(data.message || 'A 6-digit verification code has been emailed to your institutional email.');
+        setUserId(data.studentId);
+        setOtpMessage(data.message || 'A 6-digit verification code has been emailed to your registered student address.');
         return;
       }
 
@@ -99,12 +100,11 @@ export default function Login() {
     }
     setOtpLoading(true);
     try {
-      const { data } = await api.post('/auth/admin/verify-otp', {
-        adminId,
-        otp: otp.trim(),
-      });
+      const endpoint = role === 'student' ? '/auth/student/verify-otp' : '/auth/admin/verify-otp';
+      const payload = role === 'student' ? { studentId: userId, otp: otp.trim() } : { adminId: userId, otp: otp.trim() };
+      const { data } = await api.post(endpoint, payload);
       login(data.token, data.user);
-      navigate('/admin');
+      navigate(role === 'student' ? '/dashboard' : '/admin');
     } catch (err) {
       setOtpError(err.response?.data?.error || 'Invalid or expired OTP code. Please try again.');
     } finally {
@@ -117,7 +117,9 @@ export default function Login() {
     setResendNotice('');
     setResending(true);
     try {
-      const { data } = await api.post('/auth/admin/resend-otp', { adminId });
+      const endpoint = role === 'student' ? '/auth/student/resend-otp' : '/auth/admin/resend-otp';
+      const payload = role === 'student' ? { studentId: userId } : { adminId: userId };
+      const { data } = await api.post(endpoint, payload);
       setResendNotice(data.message || 'A new 6-digit verification code has been dispatched.');
     } catch (err) {
       setOtpError(err.response?.data?.error || 'Failed to resend OTP. Please wait before trying again.');
@@ -164,7 +166,7 @@ export default function Login() {
           <div>
             <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-4 mb-5 text-xs">
               <div className="font-bold mb-1 flex items-center gap-1.5 text-blue-950">
-                <span>🔐</span> Two-Step Officer Verification
+                <span>🔐</span> Two-Step Student Verification
               </div>
               <p>{otpMessage}</p>
               <p className="mt-1.5 text-slate-600 font-mono font-semibold">Account: {email}</p>

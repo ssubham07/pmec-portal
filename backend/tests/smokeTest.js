@@ -158,9 +158,9 @@ async function runSmokeTests() {
   }
 
   // ----------------------------------------------------
-  // SECTION 2: FEATURE 2 - ADMIN 2-STEP OTP EMAIL VERIFICATION
+  // SECTION 2: FEATURE 2 - STUDENT 2-STEP OTP & DIRECT ADMIN LOGIN
   // ----------------------------------------------------
-  console.log('\n▶ [Test 2] Feature 2: Admin 2-Step OTP Verification & Verification Queue...');
+  console.log('\n▶ [Test 2] Student 2-Step OTP Verification & Direct Admin Login...');
   let adminToken = '';
   let pendingStudentId = null;
   try {
@@ -180,9 +180,9 @@ async function runSmokeTests() {
     }
     console.log('  ✔ Invalid captcha rejected with 400');
 
-    // 2b: Admin login Step 1 with correct credentials -> must return { otpRequired: true, adminId }, NO token
+    // 2b: Admin login directly succeeds without OTP
     const capAdmin = await getCaptcha();
-    const adminLoginStep1 = await request('/auth/admin/login', {
+    const adminLoginRes = await request('/auth/admin/login', {
       method: 'POST',
       body: {
         email: 'ashok.examcell@pmec.edu',
@@ -192,44 +192,13 @@ async function runSmokeTests() {
       },
     });
 
-    if (adminLoginStep1.status !== 200 || !adminLoginStep1.data.otpRequired || !adminLoginStep1.data.adminId || adminLoginStep1.data.token) {
-      throw new Error('Admin login step 1 failed or returned token early: ' + JSON.stringify(adminLoginStep1.data));
+    if (adminLoginRes.status !== 200 || !adminLoginRes.data.token || adminLoginRes.data.otpRequired) {
+      throw new Error('Admin login failed or unexpectedly required OTP: ' + JSON.stringify(adminLoginRes.data));
     }
-    const adminId = adminLoginStep1.data.adminId;
-    console.log(`  ✔ Admin login Step 1 succeeded: otpRequired=true, adminId=${adminId}, token withheld`);
+    adminToken = adminLoginRes.data.token;
+    console.log('  ✔ Admin logged in directly in 1 step without OTP (token issued, office_role preserved)');
 
-    // 2c: Step 2 with WRONG OTP -> rejected with 400
-    const badOtpRes = await request('/auth/admin/verify-otp', {
-      method: 'POST',
-      body: { adminId, otp: '000000' },
-    });
-    if (badOtpRes.status !== 400 || !badOtpRes.data.error.includes('Invalid')) {
-      throw new Error('Wrong OTP was not rejected: ' + JSON.stringify(badOtpRes.data));
-    }
-    console.log('  ✔ Wrong OTP rejected with 400 Bad Request');
-
-    // Set known OTP directly in DB for testing Step 2 verification
-    const testOtpCode = '654321';
-    const testOtpHash = await bcrypt.hash(testOtpCode, 10);
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    await pool.query('UPDATE admins SET otp_code_hash = $1, otp_expires_at = $2, otp_attempts = 0 WHERE id = $3', [
-      testOtpHash,
-      expiresAt,
-      adminId,
-    ]);
-
-    // 2d: Step 2 with CORRECT OTP -> returns { token, user } and clears OTP
-    const goodOtpRes = await request('/auth/admin/verify-otp', {
-      method: 'POST',
-      body: { adminId, otp: testOtpCode },
-    });
-    if (goodOtpRes.status !== 200 || !goodOtpRes.data.token || !goodOtpRes.data.user) {
-      throw new Error('Valid OTP verification failed: ' + JSON.stringify(goodOtpRes.data));
-    }
-    adminToken = goodOtpRes.data.token;
-    console.log('  ✔ Correct OTP accepted: JWT issued, user office_role preserved, OTP cleared');
-
-    // 2e: Admin views pending students queue -> verify id_card_url is present
+    // 2c: Admin views pending students queue -> verify id_card_url is present
     const pendingListRes = await request('/admin/students/pending', {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
@@ -244,7 +213,7 @@ async function runSmokeTests() {
     pendingStudentId = targetStudent.id;
     console.log(`  ✔ Admin retrieved pending students list with ID card link: ${targetStudent.id_card_url}`);
 
-    // 2f: Admin verifies pending student
+    // 2d: Admin verifies pending student
     const verifyRes = await request(`/admin/students/${pendingStudentId}/verify`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${adminToken}` },
@@ -254,9 +223,9 @@ async function runSmokeTests() {
     }
     console.log(`  ✔ Admin successfully verified student ID: ${pendingStudentId}`);
 
-    // 2g: Student login remains single step without OTP
+    // 2e: Student login Step 1 -> returns otpRequired: true, studentId (token withheld)
     const capStudent = await getCaptcha();
-    const studentLoginRes = await request('/auth/student/login', {
+    const studentStep1 = await request('/auth/student/login', {
       method: 'POST',
       body: {
         email: targetStudent.email,
@@ -265,15 +234,40 @@ async function runSmokeTests() {
         captchaInput: capStudent.solution,
       },
     });
-    if (studentLoginRes.status !== 200 || !studentLoginRes.data.token || studentLoginRes.data.otpRequired) {
-      throw new Error('Student login failed or unexpectedly required OTP: ' + JSON.stringify(studentLoginRes.data));
+    if (studentStep1.status !== 200 || !studentStep1.data.otpRequired || !studentStep1.data.studentId || studentStep1.data.token) {
+      throw new Error('Student login did not return otpRequired: ' + JSON.stringify(studentStep1.data));
     }
-    console.log('  ✔ Student login succeeded directly in 1 step (no OTP required)');
+    const studentId = studentStep1.data.studentId;
+    console.log(`  ✔ Student Login Step 1: otpRequired=true, studentId=${studentId}, token withheld`);
 
-    results['Feature 2: Admin 2-Step OTP Verification'] = 'PASSED (worked as expected)';
+    // 2f: Student wrong OTP -> rejected with 400
+    const badOtp = await request('/auth/student/verify-otp', {
+      method: 'POST',
+      body: { studentId, otp: '000000' },
+    });
+    if (badOtp.status !== 400 || !badOtp.data.error.includes('Invalid')) {
+      throw new Error('Wrong student OTP was not rejected: ' + JSON.stringify(badOtp.data));
+    }
+    console.log('  ✔ Wrong student OTP rejected with 400 Bad Request');
+
+    // 2g: Student correct OTP -> returns { token, user }
+    const testOtpCode = '654321';
+    const Student = require('../models/Student');
+    await Student.setOtp(studentId, await bcrypt.hash(testOtpCode, 10), new Date(Date.now() + 300000));
+
+    const goodOtp = await request('/auth/student/verify-otp', {
+      method: 'POST',
+      body: { studentId, otp: testOtpCode },
+    });
+    if (goodOtp.status !== 200 || !goodOtp.data.token || !goodOtp.data.user) {
+      throw new Error('Valid student OTP verification failed: ' + JSON.stringify(goodOtp.data));
+    }
+    console.log('  ✔ Correct student OTP verified: JWT issued, student logged into dashboard');
+
+    results['Feature 2: Student 2-Step OTP Verification'] = 'PASSED (worked as expected)';
   } catch (err) {
     console.error('  ✖ Test 2 Failed:', err.message);
-    results['Feature 2: Admin 2-Step OTP Verification'] = `FAILED: ${err.message}`;
+    results['Feature 2: Student 2-Step OTP Verification'] = `FAILED: ${err.message}`;
   }
 
   // ----------------------------------------------------
@@ -295,7 +289,15 @@ async function runSmokeTests() {
         captchaInput: capRavi.solution,
       },
     });
-    studentToken = loginRavi.data.token;
+    const sId = loginRavi.data.studentId || 1;
+    const testRaviOtp = '998877';
+    const Student = require('../models/Student');
+    await Student.setOtp(sId, await bcrypt.hash(testRaviOtp, 10), new Date(Date.now() + 300000));
+    const verifyRavi = await request('/auth/student/verify-otp', {
+      method: 'POST',
+      body: { studentId: sId, otp: testRaviOtp },
+    });
+    studentToken = verifyRavi.data.token;
 
     const typesToTest = [
       { type: 'bonafide_certificate', details: { purpose: 'Higher studies passport verification' } },
