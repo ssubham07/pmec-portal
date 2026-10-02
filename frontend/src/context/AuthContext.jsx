@@ -4,7 +4,14 @@ import api from '../api/axios';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('pmec_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -15,20 +22,32 @@ export function AuthProvider({ children }) {
     }
     api
       .get('/auth/me')
-      .then((res) => setUser(res.data))
-      .catch(() => {
-        localStorage.removeItem('pmec_token');
+      .then((res) => {
+        if (res.data) {
+          setUser(res.data);
+          localStorage.setItem('pmec_user', JSON.stringify(res.data));
+        }
+      })
+      .catch((err) => {
+        // Clear token only if server explicitly rejected auth (401)
+        if (err.response && err.response.status === 401) {
+          localStorage.removeItem('pmec_token');
+          localStorage.removeItem('pmec_user');
+          setUser(null);
+        }
       })
       .finally(() => setLoading(false));
   }, []);
 
   function login(token, userData) {
     localStorage.setItem('pmec_token', token);
+    localStorage.setItem('pmec_user', JSON.stringify(userData));
     setUser(userData);
   }
 
   function logout() {
     localStorage.removeItem('pmec_token');
+    localStorage.removeItem('pmec_user');
     setUser(null);
   }
 

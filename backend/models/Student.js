@@ -10,7 +10,13 @@ const Student = {
     return rows[0];
   },
   async findByEmail(email) {
-    const { rows } = await db.query('SELECT * FROM students WHERE email = $1', [email]);
+    if (!email) return null;
+    const { rows } = await db.query('SELECT * FROM students WHERE LOWER(email) = LOWER($1)', [email.trim()]);
+    return rows[0];
+  },
+  async findByRollNo(roll_no) {
+    if (!roll_no) return null;
+    const { rows } = await db.query('SELECT * FROM students WHERE roll_no = $1', [roll_no.trim()]);
     return rows[0];
   },
   async findById(id) {

@@ -70,11 +70,13 @@ export default function AdminRequestDetail() {
           <div><p className="text-slate-400 text-xs uppercase">Phone</p><p>{request.student_phone || '—'}</p></div>
         </div>
 
-        {request.details?.challan_ref_no && (
+        {(request.details?.challan_ref_no || request.details?.bank_challan_no || request.details?.fee_reference) && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-900 mb-4 flex items-center justify-between">
             <div>
               <span className="font-bold">🏦 Bank Challan / Fee Reference No:</span>
-              <span className="ml-2 font-mono font-bold text-emerald-800 text-sm">{request.details.challan_ref_no}</span>
+              <span className="ml-2 font-mono font-bold text-emerald-800 text-sm">
+                {request.details.challan_ref_no || request.details.bank_challan_no || request.details.fee_reference}
+              </span>
             </div>
             {request.details?.fee_amount && (
               <span className="bg-white px-2 py-1 rounded border border-emerald-200 font-semibold">

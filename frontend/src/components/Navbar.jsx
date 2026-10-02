@@ -50,8 +50,8 @@ export default function Navbar() {
 
             <div className="hidden sm:flex items-center gap-2 border-l border-slate-700 pl-3">
               <span className="text-slate-300">{user.name}</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#f5b400] text-slate-950 capitalize">
-                {user.role === 'admin' ? 'Institute' : 'Student'}
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#f5b400] text-slate-950 uppercase tracking-wide">
+                {user.role === 'admin' ? (user.office_role?.replace('_', ' ') || 'Institute') : 'Student'}
               </span>
             </div>
 

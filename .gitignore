@@ -8,3 +8,5 @@ backend/uploads/id_cards/*
 frontend/build/
 .DS_Store
 npm-debug.log*
+
+.vercel

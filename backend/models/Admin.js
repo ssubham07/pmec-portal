@@ -2,7 +2,8 @@ const db = require('../config/db');
 
 const Admin = {
   async findByEmail(email) {
-    const { rows } = await db.query('SELECT * FROM admins WHERE email = $1', [email]);
+    if (!email) return null;
+    const { rows } = await db.query('SELECT * FROM admins WHERE LOWER(email) = LOWER($1)', [email.trim()]);
     return rows[0];
   },
   async findById(id) {

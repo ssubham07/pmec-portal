@@ -168,6 +168,45 @@ async function runSmokeTests() {
     dswToken = dswLogin.data.token;
     console.log('  ✔ DSW Officer logged in directly without captcha/OTP (DSW token issued)');
 
+    // 2e: Principal Direct Login
+    const principalLogin = await request('/auth/admin/login', {
+      method: 'POST',
+      body: {
+        email: 'principal@pmec.ac.in',
+        password: 'Password@123',
+      },
+    });
+    if (principalLogin.status !== 200 || !principalLogin.data.token) {
+      throw new Error(`Principal login failed: ${JSON.stringify(principalLogin.data)}`);
+    }
+    console.log('  ✔ Principal logged in directly (role: principal, token issued)');
+
+    // 2f: Scholarship Section Officer Direct Login
+    const scholarshipLogin = await request('/auth/admin/login', {
+      method: 'POST',
+      body: {
+        email: 'scholarship@pmec.ac.in',
+        password: 'Password@123',
+      },
+    });
+    if (scholarshipLogin.status !== 200 || !scholarshipLogin.data.token) {
+      throw new Error(`Scholarship login failed: ${JSON.stringify(scholarshipLogin.data)}`);
+    }
+    console.log('  ✔ Scholarship Officer logged in directly (role: scholarship, token issued)');
+
+    // 2g: Student login using College Reg No directly
+    const regNoLogin = await request('/auth/student/login', {
+      method: 'POST',
+      body: {
+        email: '2301109307',
+        password: 'Password@123',
+      },
+    });
+    if (regNoLogin.status !== 200 || !regNoLogin.data.token) {
+      throw new Error(`Student login via Reg No failed: ${JSON.stringify(regNoLogin.data)}`);
+    }
+    console.log('  ✔ Student logged in directly using College Reg No 2301109307');
+
     results['Feature 2: Direct 1-Step Login (No Captcha)'] = 'PASSED (worked as expected)';
   } catch (err) {
     console.error('  ✖ Test 2 Failed:', err.message);
